@@ -16,16 +16,16 @@ You need: **Python 3.9+**, **git**, and **Claude Code** installed. That's it.
 
 Run **one command** (pick your shell):
 
-```bash
-# macOS / Linux
-git clone https://github.com/mkcimt/cimt-claude-talend.git ~/dev/cimt-claude-talend && \
-  ~/dev/cimt-claude-talend/setup/bootstrap.sh /absolute/path/to/your/talend-project
-```
-
 ```powershell
 # Windows (PowerShell)
 git clone https://github.com/mkcimt/cimt-claude-talend.git C:\dev\cimt-claude-talend
 C:\dev\cimt-claude-talend\setup\bootstrap.ps1 C:\path\to\your\talend-project
+```
+
+```bash
+# macOS / Linux
+git clone https://github.com/mkcimt/cimt-claude-talend.git ~/dev/cimt-claude-talend && \
+  ~/dev/cimt-claude-talend/setup/bootstrap.sh /absolute/path/to/your/talend-project
 ```
 
 The bootstrap script:
