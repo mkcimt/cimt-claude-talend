@@ -81,15 +81,38 @@ def shell_rc_path() -> Path | None:
     return home / ".profile"
 
 
-def set_env_var(rc_path: Path) -> None:
-    """Add or update the CIMT_TALEND_PATTERNS line in the shell rc."""
-    if is_windows():
-        line = f'$env:{ENV_VAR} = "{REPO_ROOT}"'
-        marker_prefix = f"$env:{ENV_VAR}"
-    else:
-        line = f'export {ENV_VAR}="{REPO_ROOT}"'
-        marker_prefix = f"export {ENV_VAR}="
+def set_env_var() -> None:
+    """Set CIMT_TALEND_PATTERNS persistently for new shells.
 
+    - Windows: `setx` writes to HKCU\\Environment — visible from any new
+      cmd, PowerShell, or Git Bash shell. (Does NOT update the current
+      process — that's a fundamental setx limitation.)
+    - macOS/Linux: append to the shell rc — bash and zsh both read it
+      from the right file (.bashrc / .zshrc) at next shell start.
+    """
+    if is_windows():
+        try:
+            subprocess.run(
+                ["setx", ENV_VAR, str(REPO_ROOT)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            ok(f"{ENV_VAR} set via setx (visible in new shells)")
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            warn(f"could not set {ENV_VAR} via setx: {e}")
+            warn("the kit will still work because of the marker file in .claude/, "
+                 "but tools invoked from outside the project won't find it")
+        return
+
+    # macOS/Linux: shell rc.
+    rc_path = shell_rc_path()
+    if rc_path is None:
+        warn("could not detect shell rc — set $CIMT_TALEND_PATTERNS manually if needed")
+        return
+
+    line = f'export {ENV_VAR}="{REPO_ROOT}"'
+    marker_prefix = f"export {ENV_VAR}="
     rc_path.parent.mkdir(parents=True, exist_ok=True)
     if rc_path.exists():
         lines = rc_path.read_text(encoding="utf-8").splitlines()
@@ -106,8 +129,21 @@ def set_env_var(rc_path: Path) -> None:
         rc_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     else:
         rc_path.write_text(line + "\n", encoding="utf-8")
+    ok(f"{ENV_VAR} set in {rc_path}")
 
-    ok(f"{ENV_VAR} pointed at this repo in {rc_path}")
+
+def write_kit_path_marker(claude_dir: Path) -> None:
+    """Write `.claude/cimt-claude-talend.path` containing the kit's absolute path.
+
+    This is the **primary** mechanism by which Claude finds the kit from a
+    project's CLAUDE.md. Robust against shell-rc-not-loaded situations on
+    Windows (cmd vs. PowerShell vs. Git Bash mess) — it's just a file in
+    the project itself, no env-var indirection.
+    """
+    claude_dir.mkdir(parents=True, exist_ok=True)
+    marker = claude_dir / "cimt-claude-talend.path"
+    marker.write_text(str(REPO_ROOT) + "\n", encoding="utf-8")
+    ok(f".claude/cimt-claude-talend.path → {REPO_ROOT}")
 
 
 def make_directory_link(target: Path, link: Path) -> None:
@@ -196,6 +232,7 @@ def update_gitignore(project_dir: Path) -> int:
         ".claude/agents",
         ".claude/settings.local.json",
         ".claude/talend.local.properties",
+        ".claude/cimt-claude-talend.path",
     ]
 
     if not gitignore.exists():
@@ -297,14 +334,13 @@ def install(project_dir: Path) -> int:
     project_dir = project_dir.resolve()
     claude_dir = project_dir / ".claude"
 
-    # 1. Shell env var.
-    rc = shell_rc_path()
-    if rc is None:
-        warn("could not detect shell rc location — set CIMT_TALEND_PATTERNS manually")
-    else:
-        set_env_var(rc)
+    # 1. Marker file in the project — primary mechanism for Claude to find the kit.
+    write_kit_path_marker(claude_dir)
 
-    # 2. Directory junctions for skills + agents.
+    # 2. Shell env var — secondary, for terminal use outside the project.
+    set_env_var()
+
+    # 3. Directory junctions for skills + agents.
     try:
         make_directory_link(REPO_ROOT / "skills", claude_dir / "commands")
         ok(".claude/commands → kit's skills/")

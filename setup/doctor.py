@@ -102,20 +102,26 @@ EXPECTED_KNOWLEDGE_FILES = [
 def check_env_var(report: Report) -> None:
     section("Environment")
     value = os.environ.get(ENV_VAR)
-    if not value:
-        report.fail(
-            f"{ENV_VAR} is not set in this shell",
-            "open a new terminal (the installer added the export to your shell rc), or `source ~/.zshrc`",
-        )
-        return
-    set_path = Path(value).resolve()
-    if set_path != REPO_ROOT.resolve():
-        report.warn(
-            f"{ENV_VAR}={value} but this repo is at {REPO_ROOT}",
-            "re-run setup/install.py from this repo if you want the env var to match",
-        )
+    if value:
+        set_path = Path(value).resolve()
+        if set_path != REPO_ROOT.resolve():
+            report.warn(
+                f"{ENV_VAR}={value} but this repo is at {REPO_ROOT}",
+                "re-run setup/install.py from this repo if you want the env var to match",
+            )
+        else:
+            report.ok(f"{ENV_VAR} points at this repo")
     else:
-        report.ok(f"{ENV_VAR} points at this repo")
+        # Not set in the current shell. That's OK — projects find the kit via
+        # the .claude/cimt-claude-talend.path marker file instead. Note it but
+        # do not fail.
+        report.warn(
+            f"{ENV_VAR} is not set in this shell",
+            "harmless if you use Claude inside the project (it uses the marker file in "
+            ".claude/), but tools invoked from outside any project will need either the "
+            "env var or an absolute path. Open a new terminal to pick up the value set "
+            "by install.py.",
+        )
 
 
 def check_knowledge(report: Report) -> None:
@@ -208,6 +214,23 @@ def check_project_layout(report: Report, project_dir: Path) -> None:
     if not claude_dir.is_dir():
         report.fail(f"{claude_dir} does not exist", f"run setup/install.py {project_dir}")
         return
+
+    # Marker file — the primary mechanism Claude uses to find the kit.
+    marker = claude_dir / "cimt-claude-talend.path"
+    if marker.exists():
+        path = marker.read_text(encoding="utf-8").strip()
+        if Path(path).resolve() == REPO_ROOT.resolve():
+            report.ok(f".claude/cimt-claude-talend.path → this repo")
+        else:
+            report.warn(
+                f".claude/cimt-claude-talend.path points at {path}, not this repo ({REPO_ROOT})",
+                f"re-run setup/install.py {project_dir} to refresh the marker",
+            )
+    else:
+        report.fail(
+            ".claude/cimt-claude-talend.path missing — Claude won't be able to find the kit",
+            f"run setup/install.py {project_dir}",
+        )
 
     # Commands + agents links.
     for sub in ("commands", "agents"):

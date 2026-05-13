@@ -9,9 +9,15 @@
 
 ## cimt-claude-talend integration
 
-This project uses the [cimt-claude-talend](https://github.com/mkcimt/cimt-claude-talend) toolkit. The local checkout path lives in the environment variable `CIMT_TALEND_PATTERNS` (set by `setup/install.py`). Skills and agents are linked into this project's `.claude/`.
+This project uses the [cimt-claude-talend](https://github.com/mkcimt/cimt-claude-talend) toolkit.
 
-When the user asks about anything Talend-mechanical, **consult `$CIMT_TALEND_PATTERNS/knowledge/` first** — see `$CIMT_TALEND_PATTERNS/knowledge/INDEX.md` for the index. Topics covered:
+**Find the kit's location, in this exact order:**
+
+1. **Read `.claude/cimt-claude-talend.path`** in the project root. The file contains one line — the absolute path of the kit's checkout. **This is the primary mechanism.** It's written by `setup/install.py` and survives any shell-rc / env-var weirdness (especially on Windows where Claude Code may not see PowerShell-profile env vars).
+2. If the file is missing or empty, **fall back** to the environment variable `CIMT_TALEND_PATTERNS`.
+3. If both are missing: **STOP. Do not search the filesystem.** Tell the user: *"The cimt-claude-talend kit is not installed or not visible in this session. Please run `setup/bootstrap.sh` (macOS/Linux) or `setup/bootstrap.ps1` (Windows) from the kit's checkout, then start a new Claude Code session."* Wait for the user — do not proceed with Talend-mechanical work without the kit.
+
+Once you know the kit's path (call it `$KIT`), **consult `$KIT/knowledge/` first** for anything Talend-mechanical — see `$KIT/knowledge/INDEX.md` for the index. Topics covered:
 
 - Reading `.item` files, Studio quirks, citation conventions — `knowledge/mechanics/`
 - TMC API, deploy / promote / bind, microservice lifecycle, known bugs — `knowledge/tmc/`
@@ -24,7 +30,7 @@ Prefer these files over guessing from training data. They are empirically mainta
 
 ## Editing protocol — `.item` files
 
-**Hard rule:** whenever you edit a `.item` file (`Edit`, `MultiEdit`, `Write`), update the sibling `.properties` file's `modified_date` and `modified_product_version` in the **same turn** and commit both files together. Studio does this automatically on its own saves; for code-only edits you do it. See `$CIMT_TALEND_PATTERNS/knowledge/mechanics/item-properties-touch.md` for the exact fields and the helper script (`tools/touch_item_properties.py`).
+**Hard rule:** whenever you edit a `.item` file (`Edit`, `MultiEdit`, `Write`), update the sibling `.properties` file's `modified_date` and `modified_product_version` in the **same turn** and commit both files together. Studio does this automatically on its own saves; for code-only edits you do it. See `$KIT/knowledge/mechanics/item-properties-touch.md` for the exact fields and the helper script (`tools/touch_item_properties.py`).
 
 ## Configuration discovery
 
@@ -35,24 +41,24 @@ Two config files in this project's `.claude/`:
 
 **Before running any operation that needs a value from these files, check the relevant config.** The user is not expected to fill these in by hand. Use this order:
 
-1. **Try to read** the value from the relevant file via `$CIMT_TALEND_PATTERNS/tools/cli.py get <project> <key>`.
+1. **Try to read** the value from the relevant file via `$KIT/tools/cli.py get <project> <key>`.
 2. **If empty, try to derive** from project artifacts:
    - `talend.project.name` — folder containing `talend.project`
    - `studio.version` — from `<project-root>/<talend.project.name>/talend.project` (`productVersion` attribute)
    - `talend.p2.update.url` — from `studio.version` (R-tag → `https://update.talend.com/Studio/8/updates/R<YYYY-MM>/`)
    - `tmc.publish.url` — from `tmc.region` (`https://tmc.<region>.cloud.talend.com/inventory/`)
 3. **If still missing, ask the user** with context: explain *why* the value is needed and what good values look like. Don't just ask "what's your `tmc.workspace`?" — say "I need the TMC workspace name to publish. It's the same name across all envs (dev/tst/uat/prd) and is visible in your Talend Cloud UI URL. What is it?"
-4. **Persist the answer** via `$CIMT_TALEND_PATTERNS/tools/cli.py set <project> <key> <value>`. The CLI routes keys to the correct file (local vs shared) automatically.
-5. **For the TMC PAT** (`tmc.pat`): never derive, never log, never echo back. If absent, run `$CIMT_TALEND_PATTERNS/setup/store_pat.py <project>` so the user can paste it with no echo. Fall back to env var `TALEND_PAT` if the user prefers per-session secrets.
+4. **Persist the answer** via `$KIT/tools/cli.py set <project> <key> <value>`. The CLI routes keys to the correct file (local vs shared) automatically.
+5. **For the TMC PAT** (`tmc.pat`): never derive, never log, never echo back. If absent, **ask the user to paste their PAT into the chat**, then immediately store it via `python $KIT/tools/cli.py set <project> tmc.pat <pasted-value>`. Do *not* suggest the user run `setup/store_pat.py` — that's a terminal-only helper for users who prefer not to paste into chat, but the in-chat path is faster and the default. The PAT is a secret: do not echo it back, do not log it. After storing, confirm with "PAT stored." and nothing more.
 6. **For `talend.studio.path` and `talend.framework.path`**: never guess or use defaults silently. Always confirm with the user before persisting — wrong paths are confusing to debug later.
 
 ## Operational vs. documentation reads
 
-Build, publish, bind, promote, deploy, undeploy, redeploy, status, review — **always read live state** from the project files and TMC. Never trust cached summaries, previous-session outputs, or values that may be stale. Documentation commands may consult inventories but must verify live behaviour where it matters. Full principle: `$CIMT_TALEND_PATTERNS/knowledge/mechanics/operational-vs-documentation.md`.
+Build, publish, bind, promote, deploy, undeploy, redeploy, status, review — **always read live state** from the project files and TMC. Never trust cached summaries, previous-session outputs, or values that may be stale. Documentation commands may consult inventories but must verify live behaviour where it matters. Full principle: `$KIT/knowledge/mechanics/operational-vs-documentation.md`.
 
 ## Doctor on first use
 
-The first time you load a knowledge file or invoke a skill in this session, run `$CIMT_TALEND_PATTERNS/setup/doctor.py <project>` once. If it reports problems, surface them to the user with the fix hints and pause. If it reports OK, proceed silently — don't repeat doctor again in the same session.
+The first time you load a knowledge file or invoke a skill in this session, run `$KIT/setup/doctor.py <project>` once. If it reports problems, surface them to the user with the fix hints and pause. If it reports OK, proceed silently — don't repeat doctor again in the same session.
 
 ## Capture Discipline
 
@@ -64,14 +70,14 @@ When a non-trivial insight surfaces during work:
    - **3** — project-specific (this project's conventions, business glossary, KEDB)
    - **4** — developer-specific (paths, personal preferences, machine setup)
 2. Route accordingly:
-   - 2a / 2b → cimt-claude-talend repo (`$CIMT_TALEND_PATTERNS`), file under `knowledge/...`
+   - 2a / 2b → cimt-claude-talend repo (`$KIT`), file under `knowledge/...`
    - 3 → this project, under `docs/`
    - 4 → `.claude/talend.local.properties` (paths) or user memory (preferences)
 3. **Memory is for Layer 4 only.** Anything that should survive `rm -rf ~/.claude` belongs in a repo.
 
 If classification is unclear, ask once. Default to Layer 3 unless you can articulate the mechanic.
 
-See `$CIMT_TALEND_PATTERNS/CONTRIBUTING.md` for the full capture flow.
+See `$KIT/CONTRIBUTING.md` for the full capture flow.
 
 > **cimt-claude-talend integration block — END.**
 
