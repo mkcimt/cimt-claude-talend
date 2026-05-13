@@ -2,9 +2,11 @@
 
 **A drop-in extension that makes [Claude Code](https://www.anthropic.com/claude-code) work properly on Qlik Talend Studio projects.**
 
+> ⚠ **Beta — in active testing.** Things will change. Some sharp edges are expected. Feedback welcome via Issues.
+
 Out of the box, Claude knows generic Talend the way someone who skimmed the docs would. It doesn't know how to efficiently read the 10 000-line `.item` XML files Studio produces, doesn't know which TMC API endpoints have undocumented bugs (and how to work around them), can't tell apart a real functional change from Studio's autosave noise in a branch diff, and won't follow any of the conventions a real Talend team has built up over the years.
 
-This repo gives Claude that missing context, plus a small set of ready-made commands for the everyday Talend tasks. You install it once per Talend project and Claude immediately behaves like someone who has worked in that project for years.
+This repo gives Claude that missing context, plus a small set of ready-made commands for the everyday Talend tasks. **You install it once per Talend project, then everything else happens through Claude** — config questions, PAT entry, health checks, updates. After the initial setup you don't touch the kit's scripts again unless you want to.
 
 ---
 
@@ -35,13 +37,16 @@ The bootstrap script:
 
 **Open Claude Code in your project and start working.** Claude will ask for any missing config values (paths, tokens) the first time it needs them.
 
-If anything looks off, run:
+If anything looks off, **just ask Claude** — *"check the cimt-claude-talend setup for this project"*. Claude runs the health check, surfaces any problems, and offers to fix them.
+
+<details>
+<summary>If you'd rather run the check yourself (CLI)</summary>
 
 ```bash
 ~/dev/cimt-claude-talend/setup/doctor.py /absolute/path/to/your/talend-project
 ```
 
-It tells you exactly what's wrong and how to fix it.
+</details>
 
 ---
 
@@ -71,8 +76,8 @@ After bootstrap, your Talend project gets:
 | File / dir | Who owns it | In git? | Purpose |
 |---|---|---|---|
 | `CLAUDE.md` | you and your team | yes | Loaded by Claude at session start. Project description + a fixed integration block. |
-| `.claude/commands/` | this kit (junction) | no | Slash commands. Linked, not copied. |
-| `.claude/agents/` | this kit (junction) | no | Subagents. Linked, not copied. |
+| `.claude/commands/` | this kit | no | Slash commands. A shortcut that points to the kit, so updates to the kit show up automatically. |
+| `.claude/agents/` | this kit | no | Subagents. Same shortcut idea as `commands/`. |
 | `.claude/talend.properties` | your team | **yes** | Project-shared config: project name, TMC region/workspace, etc. |
 | `.claude/talend.local.properties` | you | no | Per-developer config: Studio path, framework path, PAT. |
 | `.claude/settings.local.json` | Claude Code itself | no | Claude's permission allowlist, env vars. Not managed by this kit. |
@@ -132,11 +137,16 @@ If a finding is true for *any* Talend project → Layer 2 (here). If it's only t
 
 ## Updating
 
+Just tell Claude: *"update cimt-claude-talend"*. Claude pulls the latest and tells you whether a session restart is needed (knowledge files load automatically; skill/agent changes need a restart).
+
+<details>
+<summary>CLI alternative</summary>
+
 ```bash
 ~/dev/cimt-claude-talend/setup/update.py
 ```
 
-Or just tell Claude: *"update cimt-claude-talend"*. The script does `git pull` and tells you whether a Claude session restart is needed (knowledge files load automatically; skill/agent changes need a restart).
+</details>
 
 ---
 
