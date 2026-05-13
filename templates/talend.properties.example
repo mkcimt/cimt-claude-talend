@@ -1,0 +1,21 @@
+# Project-shared configuration for cimt-claude-talend.
+# This file IS committed to git. Per-developer settings live in talend.local.properties.
+#
+# Empty values are fine — Claude derives most of them from the project itself
+# the first time they're needed. Just confirm or override when Claude asks.
+#
+# Derived automatically (leave blank unless you want to override):
+#   - talend.project.name      from <project>/talend.project
+#   - studio.version           from <project>/talend.project (productVersion)
+#   - talend.p2.update.url     from studio.version
+#   - tmc.publish.url          from tmc.region
+
+talend.project.name=
+studio.version=
+talend.p2.update.url=
+
+tmc.region=eu
+tmc.publish.url=
+tmc.workspace=
+
+env.chain=dev,tst,uat,prd

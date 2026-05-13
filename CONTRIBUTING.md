@@ -16,7 +16,7 @@ When you (or Claude on your behalf) hit a non-trivial Talend insight mid-work:
    - 2a → this repo, in the matching `knowledge/...` file. New file if no existing one fits.
    - 2b → this repo, in `knowledge/patterns/...`. Document the variants and trade-offs.
    - 3 → the consuming Talend project's `docs/` and/or `CLAUDE.md`.
-   - 4 → `~/.claude/CLAUDE.md` or the project's `.claude/settings.local.json`.
+   - 4 → the project's `.claude/talend.local.properties` (paths, PAT) or your user memory (preferences).
 
 3. **Memory is for Layer 4 only.** Anything that should survive a `rm -rf ~/.claude` belongs in a repo, not in memory.
 

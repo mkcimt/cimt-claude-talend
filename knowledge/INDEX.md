@@ -10,6 +10,7 @@ How Talend Studio and its artifacts actually work. No project-level choice invol
 - [`item-properties-touch.md`](mechanics/item-properties-touch.md) — Why `.properties` siblings must be touched on `.item` edits (TMC `repository.commit.id` tracking).
 - [`studio-noise-filter.md`](mechanics/studio-noise-filter.md) — Diff noise patterns Studio writes on save; what to ignore vs. what to review.
 - [`git-workflow.md`](mechanics/git-workflow.md) — Feature branch discipline, worktrees alongside Studio, push protocol.
+- [`operational-vs-documentation.md`](mechanics/operational-vs-documentation.md) — Read-live principle: build/deploy/promote/review must read live state; documentation may cache with explicit staleness markers.
 
 ## `patterns/` — Layer 2b: Optional patterns
 

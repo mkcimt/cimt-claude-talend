@@ -6,16 +6,21 @@ microservice (or any artifact) by name.
 All TMC IDs (artifact, workspace, task, promotion) are auto-discovered
 from the API name and env names; the user never types an ID.
 
-Configuration — two layers:
+Configuration — two .properties files in the project's .claude/ folder:
 
-  1. Project: <project-root>/.claude/talend.config.json (committed).
-     Auto-discovered by walking up from CWD.
+  1. talend.properties (committed) — talend.project.name, tmc.region,
+     tmc.workspace, tmc.publish.url, talend.p2.update.url, env.chain.
 
-  2. Dev / machine: env vars (typically set by .claude/settings.local.json):
-        TALEND_STUDIO_PATH    — path to Talend Studio install
-        JAVA_HOME             — JDK 17 (Studio's bundled Zulu is fine)
-        TALEND_PAT            — TMC personal access token
-        TALEND_USER_COMPONENTS_FOLDER (optional, only for builds)
+  2. talend.local.properties (gitignored) — talend.studio.path,
+     talend.framework.path, tmc.pat.
+
+Both are auto-discovered by walking up from CWD. Run setup/install.py to
+create them from templates.
+
+Environment variable fallbacks (used if the corresponding .local.properties
+value is empty):
+  TALEND_STUDIO_PATH — falls back to talend.studio.path
+  TALEND_PAT         — falls back to tmc.pat
 
 Usage:
 
@@ -47,35 +52,87 @@ from pathlib import Path
 
 
 def find_project_root(start: Path | None = None) -> Path:
-    """Walk up looking for .claude/talend.config.json."""
+    """Walk up looking for .claude/talend.properties (or, transitionally, .claude/talend.config.json)."""
     cur = (start or Path.cwd()).resolve()
     while cur != cur.parent:
-        if (cur / ".claude" / "talend.config.json").is_file():
+        if (cur / ".claude" / "talend.properties").is_file():
             return cur
+        if (cur / ".claude" / "talend.config.json").is_file():
+            sys.exit(
+                f"Found legacy .claude/talend.config.json in {cur}.\n"
+                f"This project's config is on the old JSON format. Run:\n"
+                f"  $CIMT_TALEND_PATTERNS/setup/install.py {cur}\n"
+                f"to migrate to .properties."
+            )
         cur = cur.parent
     sys.exit(
-        "Could not find .claude/talend.config.json walking up from "
+        "Could not find .claude/talend.properties walking up from "
         f"{start or Path.cwd()}. Are you inside a Talend project that uses "
-        "the cimt-talend plugin?"
+        "the cimt-claude-talend kit? If not, run setup/install.py first."
     )
 
 
+# Load .properties files using the shared module.
+_SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(_SCRIPT_DIR))
+import properties as _props  # noqa: E402
+
+
 def load_config(root: Path) -> dict:
-    return json.loads((root / ".claude" / "talend.config.json").read_text("utf-8"))
+    """Return a flat dict merging talend.properties + talend.local.properties + derived defaults."""
+    project_cfg = _props.load(root / ".claude" / "talend.properties")
+    local_cfg = _props.load(root / ".claude" / "talend.local.properties")
+
+    cfg = {}
+    cfg.update(project_cfg)
+    cfg.update(local_cfg)
+
+    # Derive sensible defaults for unset values.
+    region = cfg.get("tmc.region") or "eu"
+    cfg["tmc.region"] = region
+
+    if not cfg.get("tmc.publish.url"):
+        cfg["tmc.publish.url"] = f"https://tmc.{region}.cloud.talend.com/inventory/"
+
+    if not cfg.get("talend.p2.update.url"):
+        cfg["talend.p2.update.url"] = "https://update.talend.com/Studio/8/updates/latest"
+
+    if not cfg.get("env.chain"):
+        cfg["env.chain"] = "dev,tst,uat,prd"
+
+    return cfg
 
 
-def need_env(name: str) -> str:
-    v = os.environ.get(name)
+def need_cfg(cfg: dict, key: str, hint: str = "") -> str:
+    """Return cfg[key], or sys.exit with a clear message if it's missing/empty."""
+    v = cfg.get(key)
     if not v:
-        sys.exit(f"Required env var {name} is not set.")
+        msg = f"Required config value '{key}' is missing or empty in .claude/talend.properties."
+        if hint:
+            msg += f"\n  hint: {hint}"
+        msg += "\n  Open Claude and ask it to set this, or use:"
+        msg += f"\n    $CIMT_TALEND_PATTERNS/tools/cli.py set <project> {key} <value>"
+        sys.exit(msg)
     return v
+
+
+def need_pat(cfg: dict) -> str:
+    """Return TMC PAT from talend.local.properties (preferred) or $TALEND_PAT env var."""
+    pat = cfg.get("tmc.pat") or os.environ.get("TALEND_PAT")
+    if not pat:
+        sys.exit(
+            "TMC Personal Access Token not available.\n"
+            "  Either run: $CIMT_TALEND_PATTERNS/setup/store_pat.py <project>\n"
+            "  or set: export TALEND_PAT='<your-token>' for this session."
+        )
+    return pat
 
 
 # ----------------------------------------------------------------- http ---
 
 
 def api_base(cfg: dict) -> str:
-    region = cfg["tmc"].get("region", "eu")
+    region = cfg.get("tmc.region", "eu")
     return f"https://api.{region}.cloud.talend.com"
 
 
@@ -156,15 +213,28 @@ def discover_promotion(cfg: dict, src: str, dst: str, token: str) -> dict:
 # -------------------------------------------------------- maven helpers ---
 
 
+def need_studio_path(cfg: dict) -> str:
+    """Return talend.studio.path from local properties or $TALEND_STUDIO_PATH env."""
+    path = cfg.get("talend.studio.path") or os.environ.get("TALEND_STUDIO_PATH")
+    if not path:
+        sys.exit(
+            "Talend Studio path is not set.\n"
+            "  Set it via Claude (it will ask), or use:\n"
+            "    $CIMT_TALEND_PATTERNS/tools/cli.py set <project> talend.studio.path <path>\n"
+            "  Or export TALEND_STUDIO_PATH for this session."
+        )
+    return path
+
+
 def maven_args(cfg: dict, project_root: Path) -> list[str]:
     """The repeatable -s / -D... block for any maven invocation."""
-    studio = need_env("TALEND_STUDIO_PATH")
+    studio = need_studio_path(cfg)
     return [
         "-B",
         "-s", f"{studio}/configuration/maven_user_settings.xml",
         f"-Dmaven.repo.local={studio}/configuration/.m2/repository",
         f"-Dlicense.path={studio}/license",
-        f"-Dtalend.studio.p2.update={cfg['p2UpdateUrl']}",
+        f"-Dtalend.studio.p2.update={cfg['talend.p2.update.url']}",
         "-Dgeneration.type=local",
         "-Dstudio.error.on.component.missing=false",
     ]
@@ -243,8 +313,9 @@ def cmd_genpoms(cfg: dict, args, token: str, project_root: Path) -> int:
 
 
 def cmd_build(cfg: dict, args, token: str, project_root: Path) -> int:
-    pom = find_api_pom(project_root, cfg["talendProjectName"], args.api)
-    poms_root = project_root / cfg["talendProjectName"] / "poms"
+    project_name = need_cfg(cfg, "talend.project.name", "Talend project folder name, e.g. MY_PROJECT")
+    pom = find_api_pom(project_root, project_name, args.api)
+    poms_root = project_root / project_name / "poms"
     pl = pom.parent.relative_to(poms_root).as_posix()
     run_mvn(
         ["clean", "package", *maven_args(cfg, project_root), "-pl", pl, "-am", "-fae"],
@@ -254,19 +325,20 @@ def cmd_build(cfg: dict, args, token: str, project_root: Path) -> int:
 
 
 def cmd_publish(cfg: dict, args, token: str, project_root: Path) -> int:
-    pom = find_api_pom(project_root, cfg["talendProjectName"], args.api)
-    poms_root = project_root / cfg["talendProjectName"] / "poms"
+    project_name = need_cfg(cfg, "talend.project.name", "Talend project folder name, e.g. MY_PROJECT")
+    pom = find_api_pom(project_root, project_name, args.api)
+    poms_root = project_root / project_name / "poms"
     pl = pom.parent.relative_to(poms_root).as_posix()
-    studio = need_env("TALEND_STUDIO_PATH")
+    studio = need_studio_path(cfg)
     run_mvn(
         [
             "org.talend.ci:cloudpublisher-maven-plugin:8.0.13:publish",
             "-B",
             "-s", f"{studio}/configuration/maven_user_settings.xml",
             f"-Dmaven.repo.local={studio}/configuration/.m2/repository",
-            f"-Dservice.url={cfg['tmc']['publishUrl']}",
+            f"-Dservice.url={cfg['tmc.publish.url']}",
             f"-Dcloud.token={token}",
-            f"-Dcloud.publisher.workspace={cfg['tmc']['workspace']}",
+            f"-Dcloud.publisher.workspace={need_cfg(cfg, 'tmc.workspace', 'TMC workspace name — same across envs')}",
             f"-Dcloud.publisher.environment={args.env}",
             "-Dcloud.publisher.screenshot=true",
             "-pl", pl,
@@ -405,8 +477,7 @@ def main() -> int:
 
     project_root = find_project_root()
     cfg = load_config(project_root)
-    token = need_env("TALEND_PAT") if args.cmd != "genpoms" or True else ""
-    # genpoms doesn't strictly need the PAT but loading it eagerly is fine.
+    token = need_pat(cfg) if args.cmd != "genpoms" else (cfg.get("tmc.pat") or os.environ.get("TALEND_PAT", ""))
 
     if args.cmd == "status":
         return cmd_status(cfg, args, token)

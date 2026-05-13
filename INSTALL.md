@@ -1,124 +1,112 @@
 # Installation
 
+Most users should just follow the [Quick Setup in the README](README.md#5-minute-setup) and stop reading. This file covers the long form: what each step does, what the alternatives are, and how to recover when something looks wrong.
+
 ## Prerequisites
 
-- Python 3.9+ (for the release tools)
-- Maven 3.9+, JDK 17 (only if you'll run build/publish locally)
-- A Talend Studio project (Studio 8.x) checked out somewhere
-- Optionally: a Talend Personal Access Token (PAT) for TMC API operations
+- **Python 3.9+** (everything in `setup/` and `tools/` is plain stdlib Python).
+- **git** (for cloning and for git-tracked operations the kit does inside your project).
+- **Claude Code** installed (any recent version).
 
-## Step 1 — Clone this repo
+Optional, only if you'll run Talend builds locally:
+- Maven 3.9+
+- JDK 17 (the bundled Zulu inside your Talend Studio install is fine)
+- A Talend Studio install
+- A Talend Management Console Personal Access Token
 
-Choose a location *outside* your Talend project workspace. Recommended:
+## Step 1 — clone the kit
 
-```
+Pick any path *outside* any individual Talend project. The kit is shared across projects.
+
+```bash
 # macOS / Linux
 git clone https://github.com/mkcimt/cimt-claude-talend.git ~/dev/cimt-claude-talend
 
-# Windows (PowerShell)
-git clone https://github.com/mkcimt/cimt-claude-talend.git C:\var\opt\cimt-claude-talend
+# Windows
+git clone https://github.com/mkcimt/cimt-claude-talend.git C:\dev\cimt-claude-talend
 ```
 
-The exact path is yours to pick — `install.sh` will record it in your shell rc.
+## Step 2 — bootstrap into a project
 
-## Step 2 — Run install
+```bash
+# macOS / Linux
+~/dev/cimt-claude-talend/setup/bootstrap.sh /absolute/path/to/your/talend-project
 
-From inside the cloned repo:
-
+# Windows
+C:\dev\cimt-claude-talend\setup\bootstrap.ps1 C:\path\to\your\talend-project
 ```
-./setup/install.sh /absolute/path/to/your/talend-project
+
+What the bootstrap does, in order:
+
+1. Looks for the companion `claude-qlik-docs` repo. If not found in any common location and not pointed at by `$CLAUDE_QLIK_DOCS`, it clones it next to this one. Without claude-qlik-docs, Claude is still useful but won't know the official Qlik docs.
+2. Runs `setup/install.py` with your project path. This step:
+   - Writes `export CIMT_TALEND_PATTERNS=...` into your shell rc (`~/.zshrc` on macOS, `~/.bashrc` on Linux, `~/Documents/PowerShell/Microsoft.PowerShell_profile.ps1` on Windows). Single global value — re-running for other projects updates the line in place.
+   - Creates **directory junctions** at `<project>/.claude/commands/` → kit's `skills/`, and `<project>/.claude/agents/` → kit's `agents/`. On Windows these are NTFS junctions (no admin rights needed). On macOS/Linux they are regular directory symlinks.
+   - Drops `CLAUDE.md`, `.claude/talend.properties`, and `.claude/talend.local.properties` from templates if they don't already exist in the project.
+   - Adds `.claude/commands/`, `.claude/agents/`, `.claude/settings.local.json`, and `.claude/talend.local.properties` to the project's `.gitignore` (creates the file if absent).
+   - Untracks any legacy `.claude/commands/` or `.claude/agents/` files from the git index — typical for projects that adopted this kit after maintaining those files manually.
+
+## Step 3 — verify
+
+```bash
+~/dev/cimt-claude-talend/setup/doctor.py /absolute/path/to/your/talend-project
 ```
 
-What it does, in order:
+Doctor checks environment, knowledge files, Python tools, project layout, config files, and CLAUDE.md. Each line is one of `[OK]`, `[WARN]`, `[FAIL]` with a fix hint when relevant. Final line is a summary banner.
 
-1. Sets `CIMT_TALEND_PATTERNS` to the absolute path of this repo, appended to (or replaced in) your shell rc (`~/.zshrc` on macOS, `~/.bashrc` on Linux). Single global value across all projects.
-2. Creates symlinks (or junctions on Windows) from your project's `.claude/commands/` to this repo's `skills/`, and from `.claude/agents/` to this repo's `agents/`. Existing symlinks pointing to old locations are replaced; nothing else in `.claude/` is touched.
-3. Drops `CLAUDE.md` into your project root if one doesn't exist. The integration block in the template is **pure copy-paste — nothing to fill in**. Add your own project sections (description, repo layout, git rules, user profile) above or below the block. If a `CLAUDE.md` already exists in the project, it is left untouched — the installer tells you which block to merge in from `templates/CLAUDE.md.template`.
-4. Drops `.claude/talend.config.json` from the example template if one doesn't exist.
+## Step 4 — open Claude Code
 
-### Running on multiple Talend projects
+In your Talend project. Claude reads `CLAUDE.md`, picks up the integration block, and is ready. Try a prompt like *"explain what job iXYZ does"* to confirm everything works.
 
-The installer is **fully idempotent**. Run it once per project — re-running on the same project, or running on a second/third project, is safe and does not duplicate anything:
+## Running on multiple Talend projects
+
+The installer is **fully idempotent**. Run the bootstrap (or install directly) once per project — re-running on the same project, or running on a second project, is safe and does not duplicate anything:
 
 - The `CIMT_TALEND_PATTERNS` line in your shell rc is updated in place (single global).
-- Symlinks are recreated cleanly per project.
-- `CLAUDE.md` and `talend.config.json` are only created when missing — never overwritten.
+- Junctions are recreated cleanly per project.
+- `CLAUDE.md`, `talend.properties`, `talend.local.properties` are only created when missing — never overwritten.
 
 Typical consultant setup with three Talend customer projects:
 
-```
-./setup/install.sh /work/customerA/talend-repo
-./setup/install.sh /work/customerB/talend-repo
-./setup/install.sh /work/customerC/talend-repo
-```
-
-After the third run you have three projects with their own `.claude/` symlinks pointing at the same `cimt-claude-talend` checkout. Each project's `CLAUDE.md` carries its own project-specific content around the shared integration block.
-
-### Flags
-
-| Flag | Effect |
-|---|---|
-| `--uninstall` | Removes symlinks from `<project>/.claude/`. Leaves `CLAUDE.md`, `talend.config.json`, and the shell-rc line alone. |
-| `-h`, `--help` | Show usage. |
-
-## Step 3 — Verify
-
-```
-./setup/doctor.sh
+```bash
+~/dev/cimt-claude-talend/setup/bootstrap.sh /work/customerA/talend-repo
+~/dev/cimt-claude-talend/setup/install.py /work/customerB/talend-repo
+~/dev/cimt-claude-talend/setup/install.py /work/customerC/talend-repo
 ```
 
-Checks:
+(After the first project, you can use `install.py` directly — `claude-qlik-docs` is already cloned.)
 
-- `CIMT_TALEND_PATTERNS` is set and points at a valid checkout
-- All knowledge files referenced by skills exist
-- All skill/agent symlinks resolve
-- Python tools are runnable
+## What gets created where
 
-Fix anything it flags.
+| File / dir | Created on | In git? |
+|---|---|---|
+| `CLAUDE.md` (in project root) | first install only | yes |
+| `.claude/commands` | every install (link) | no (.gitignored) |
+| `.claude/agents` | every install (link) | no (.gitignored) |
+| `.claude/talend.properties` | first install only | **yes** |
+| `.claude/talend.local.properties` | first install only | no (.gitignored) |
+| `.gitignore` (or appended to existing) | every install | yes |
 
-## Step 4 — Per-project config
+## Uninstalling
 
-Inside your Talend project:
-
-1. Copy `templates/talend.config.json.example` from this repo to `.claude/talend.config.json` in your project. Fill in `talendProjectName`, `p2UpdateUrl`, `tmc.publishUrl`, `tmc.workspace`. **This file is committed** — it's per-project, not per-developer.
-
-2. In your project's `.claude/settings.local.json` (**gitignored**), add:
-
-   ```json
-   {
-     "env": {
-       "TALEND_STUDIO_PATH": "<absolute path to your Studio install>",
-       "JAVA_HOME": "<absolute path to JDK 17 — Studio's bundled Zulu is fine>"
-     }
-   }
-   ```
-
-3. Per-session, export your TMC PAT in the shell where you'll run release commands:
-
-   ```
-   export TALEND_PAT="<your TMC PAT>"
-   ```
-
-   Never commit. Never write to disk.
-
-## Step 5 — Project `CLAUDE.md`
-
-The installer dropped `templates/CLAUDE.md.template` into your project as `CLAUDE.md` (if none existed). The integration block between the `START` and `END` markers is **pure copy-paste — nothing to fill in inside it**. Around the block, add the content your project needs Claude to know: project description, repo layout, project-specific conventions, git rules, user profile.
-
-If a `CLAUDE.md` already existed in your project, copy the integration block from `templates/CLAUDE.md.template` and paste it somewhere in your `CLAUDE.md` (typical placement: after the project description, before deeper sections). Future upgrades = replace the whole block; nothing surrounding it is touched.
-
-## Step 6 — Smoke test
-
-In your project, ask Claude:
-
-> "Wo finde ich die TMC microservice lifecycle Doku?"
-
-Claude should locate `knowledge/tmc/microservice-lifecycle.md` via the env var and reply. If it can't, run `doctor.sh` again.
-
-## Uninstall
-
-```
-./setup/install.sh --uninstall /path/to/your/talend-project
+```bash
+~/dev/cimt-claude-talend/setup/install.py --uninstall /path/to/your/project
 ```
 
-Removes symlinks. Does not touch your `CLAUDE.md` or `talend.config.json` (those belong to the project). The shell-rc line for `CIMT_TALEND_PATTERNS` remains — remove manually if no projects use it.
+Removes the directory junctions from `<project>/.claude/`. Does **not** delete `CLAUDE.md`, `talend.properties`, or `talend.local.properties` — those are your project's files. The shell-rc line stays — remove it by hand if no projects use the kit any more.
+
+## Recovering from common issues
+
+**`CIMT_TALEND_PATTERNS` not set in your shell.** Run `source ~/.zshrc` (or your shell's rc), or open a new terminal. The installer appended the export but your current shell only loads the rc once at startup.
+
+**Doctor says symlinks/junctions are broken.** The kit's checkout was probably moved or deleted. Re-run `setup/install.py <project>` — it recreates the links pointing at the kit's current location.
+
+**Doctor says `claude-qlik-docs` not found.** Either clone it (`git clone https://github.com/mkcimt/claude-qlik-docs.git ~/dev/claude-qlik-docs`) or, if it's already cloned somewhere unusual, set `CLAUDE_QLIK_DOCS=/path/to/your/checkout` in your shell rc and re-run doctor.
+
+**A `talend.local.properties` value is wrong** (e.g. you moved your Talend Studio install). Either edit the file (it's a simple `.properties` text file), or just tell Claude — it can update the file via `tools/cli.py set`.
+
+**A `talend.properties` value is wrong** (e.g. TMC workspace name changed). Same — edit by hand, or ask Claude.
+
+**TMC PAT expired.** Run `~/dev/cimt-claude-talend/setup/store_pat.py /path/to/your/project` and paste the new token (input is hidden). Or ask Claude to do it.
+
+**Old `talend.config.json` (legacy JSON format) is still in your project.** Re-run `setup/install.py <project>` — it deletes the old file (the new `.properties` files supersede it).

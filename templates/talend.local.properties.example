@@ -1,0 +1,26 @@
+# Per-developer configuration for cimt-claude-talend.
+# This file is gitignored — your local paths and secrets stay on your machine.
+#
+# Empty values are fine — Claude will ask for them when needed and write the
+# answer here. You don't need to fill this in by hand.
+
+# Path to your local Talend Studio install. The folder that contains
+#   Talend-Studio (macOS app bundle) / Talend-Studio.exe (Windows) / Talend-Studio (Linux)
+# Examples:
+#   macOS:   /Applications/TalendStudio-8.0.1/studio
+#   Windows: C:\Talend\TalendStudio-8.0.1\studio
+#   Linux:   /opt/Talend/TalendStudio-8.0.1/studio
+talend.studio.path=
+
+# Local checkout of your project's external framework repository (only if the
+# project uses an external framework for context variables / config — Pattern B
+# in knowledge/patterns/context-variables.md). Claude detects whether this is
+# needed by scanning the project; leave empty if not applicable.
+talend.framework.path=
+
+# Talend Management Console Personal Access Token.
+# Treat as a secret. The file is gitignored; consider also `chmod 600`.
+# Tip: prefer running setup/store_pat.py instead of editing this by hand —
+# it reads the token with no terminal echo and stores it here for you.
+# A future version will move this into your OS keychain transparently.
+tmc.pat=
