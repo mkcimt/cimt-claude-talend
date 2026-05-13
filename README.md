@@ -189,6 +189,10 @@ If you find this useful at a customer engagement: a mention or a link back is ap
 
 ---
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md). Releases are tagged on GitHub — watch the repo or check the [Releases page](https://github.com/mkcimt/cimt-claude-talend/releases) to know when something new lands.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

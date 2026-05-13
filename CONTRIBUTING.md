@@ -51,9 +51,19 @@ This repo is currently maintained at [mkcimt/cimt-claude-talend](https://github.
 1. Fork or branch.
 2. Add the knowledge file (or update an existing one).
 3. Update `knowledge/INDEX.md` if you added a file.
-4. Open a PR with a short rationale: which layer, where it came from, how it was verified.
+4. Add a short entry to `CHANGELOG.md` under `## [Unreleased]` describing the change (Keep-a-Changelog format: `### Added`/`### Changed`/`### Fixed`/`### Removed`/`### Security`).
+5. Open a PR with a short rationale: which layer, where it came from, how it was verified.
 
-For typos or small clarifications, a PR directly to `main` is fine.
+For typos or small clarifications, a PR directly to `main` is fine — no CHANGELOG entry needed for cosmetic-only changes.
+
+## Releases (maintainer note)
+
+We use SemVer with a `0.x.x` beta prefix. When cutting a release:
+
+1. Move the `## [Unreleased]` entries in `CHANGELOG.md` under a new `## [X.Y.Z] — YYYY-MM-DD` heading.
+2. Commit the changelog update.
+3. `git tag -a vX.Y.Z -m "vX.Y.Z"` on the resulting commit, then `git push --tags`.
+4. `gh release create vX.Y.Z --title "vX.Y.Z — <one-line summary>" --notes-from-tag` (or with the release notes pasted in).
 
 ## When Claude is in the loop
 
