@@ -176,34 +176,66 @@ def copy_template_if_missing(template_name: str, target: Path) -> bool:
 
 
 def update_gitignore(project_dir: Path) -> int:
-    """Add the required entries to .gitignore. Returns count of new entries."""
+    """Add the required entries to .gitignore. Returns count of new entries.
+
+    Critically: .claude/commands and .claude/agents are *symlinks/junctions*,
+    not regular directories. .gitignore entries for them must NOT have a
+    trailing slash — a trailing slash means "directory only" and won't match
+    a symlink-to-a-directory. Without this, git would silently track the
+    symlink (mode 120000) with the developer's absolute path baked in.
+    """
     gitignore = project_dir / ".gitignore"
-    header = "# cimt-claude-talend — developer-specific Claude Code state (do not commit)"
+    header_lines = [
+        "# cimt-claude-talend — developer-specific Claude Code state (do not commit).",
+        "# No trailing slashes — .claude/commands and .claude/agents are symlinks /",
+        "# junctions to the kit, not regular directories, and trailing slashes would",
+        "# fail to match them.",
+    ]
     entries = [
-        ".claude/commands/",
-        ".claude/agents/",
+        ".claude/commands",
+        ".claude/agents",
         ".claude/settings.local.json",
         ".claude/talend.local.properties",
     ]
+
     if not gitignore.exists():
-        body = header + "\n" + "\n".join(entries) + "\n"
+        body = "\n".join(header_lines + entries) + "\n"
         gitignore.write_text(body, encoding="utf-8")
         return len(entries)
 
     existing = gitignore.read_text(encoding="utf-8")
-    existing_lines = {line.strip().lstrip("/") for line in existing.splitlines() if line.strip()}
+    # Match each entry whether the existing line has a trailing slash or not.
+    existing_lines = {line.strip().rstrip("/").lstrip("/")
+                      for line in existing.splitlines() if line.strip()}
     added = []
     for entry in entries:
-        if entry not in existing_lines and entry.rstrip("/") not in existing_lines:
+        if entry.rstrip("/") not in existing_lines:
             added.append(entry)
-    if not added:
+
+    # Also: detect and warn about existing trailing-slash entries for the symlinks.
+    needs_slash_fix = []
+    for raw in existing.splitlines():
+        s = raw.strip()
+        if s in (".claude/commands/", ".claude/agents/"):
+            needs_slash_fix.append(s)
+
+    if not added and not needs_slash_fix:
         return 0
-    suffix = ""
-    if not existing.endswith("\n"):
-        suffix = "\n"
-    suffix += "\n" + header + "\n" + "\n".join(added) + "\n"
-    gitignore.write_text(existing + suffix, encoding="utf-8")
-    return len(added)
+
+    new_text = existing
+    if needs_slash_fix:
+        # Strip the trailing slash on existing entries in place.
+        for bad in needs_slash_fix:
+            new_text = new_text.replace(bad + "\n", bad.rstrip("/") + "\n")
+            new_text = new_text.replace("\n" + bad, "\n" + bad.rstrip("/"))
+
+    if added:
+        if not new_text.endswith("\n"):
+            new_text += "\n"
+        new_text += "\n" + "\n".join(header_lines) + "\n" + "\n".join(added) + "\n"
+
+    gitignore.write_text(new_text, encoding="utf-8")
+    return len(added) + len(needs_slash_fix)
 
 
 def is_git_repo(path: Path) -> bool:
