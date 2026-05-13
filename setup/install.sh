@@ -144,4 +144,52 @@ else
 fi
 echo
 
+# 5. .gitignore — make sure the developer-specific symlinks aren't tracked.
+GITIGNORE="$PROJECT_DIR/.gitignore"
+GITIGNORE_ENTRIES=(
+  ".claude/commands/"
+  ".claude/agents/"
+  ".claude/settings.local.json"
+)
+GITIGNORE_HEADER="# cimt-claude-talend — developer-specific Claude Code state (do not commit)"
+
+if [[ ! -f "$GITIGNORE" ]]; then
+  {
+    echo "$GITIGNORE_HEADER"
+    printf '%s\n' "${GITIGNORE_ENTRIES[@]}"
+  } > "$GITIGNORE"
+  echo "==> Created $GITIGNORE with cimt-claude-talend entries."
+else
+  added=0
+  for entry in "${GITIGNORE_ENTRIES[@]}"; do
+    # Match the entry whether it's plain or has a leading slash, ignoring inline comments.
+    if ! grep -qxE "^/?${entry//./\\.}\$" "$GITIGNORE"; then
+      if [[ $added -eq 0 ]]; then
+        # Add a blank line and header on first addition.
+        printf '\n%s\n' "$GITIGNORE_HEADER" >> "$GITIGNORE"
+      fi
+      echo "$entry" >> "$GITIGNORE"
+      added=$((added+1))
+    fi
+  done
+  if [[ $added -gt 0 ]]; then
+    echo "==> Added $added entry(ies) to $GITIGNORE."
+  else
+    echo "==> $GITIGNORE already covers the cimt-claude-talend entries."
+  fi
+fi
+
+# Untrack any commands/agents symlinks that are currently in the index
+# (typical when a project tracked these files before adopting cimt-claude-talend).
+if git -C "$PROJECT_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+  to_untrack="$(git -C "$PROJECT_DIR" ls-files .claude/commands/ .claude/agents/ 2>/dev/null || true)"
+  if [[ -n "$to_untrack" ]]; then
+    echo "==> Untracking pre-existing .claude/commands/ and .claude/agents/ files in git index:"
+    echo "$to_untrack" | sed 's/^/    /'
+    echo "$to_untrack" | xargs git -C "$PROJECT_DIR" rm --cached -q
+    echo "    -> commit the resulting changes (and the updated .gitignore) on a feature branch."
+  fi
+fi
+echo
+
 echo "==> Done. Run setup/doctor.sh to verify."
