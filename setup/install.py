@@ -146,40 +146,69 @@ def write_kit_path_marker(claude_dir: Path) -> None:
     ok(f".claude/cimt-claude-talend.path → {REPO_ROOT}")
 
 
+def _try_remove_link(link: Path) -> bool:
+    """Try to remove `link` if it's a symlink, junction, or empty directory.
+
+    Returns True if removed; False if the path doesn't exist or is a regular
+    directory with content (which the caller must handle).
+
+    Why this is fiddly: Path.is_symlink() detects POSIX symlinks reliably,
+    but Windows junctions confuse Python's `is_symlink()` on some versions.
+    Rather than try to *detect* the link type, we just *attempt removal* with
+    a sequence of strategies. Whichever succeeds, succeeds.
+    """
+    if not link.exists() and not link.is_symlink():
+        return False
+    # Strategy 1: unlink() — works for regular files, POSIX symlinks, and
+    # Windows file symlinks. May work for junctions in newer Python on Windows.
+    try:
+        link.unlink()
+        return True
+    except (IsADirectoryError, PermissionError, OSError):
+        pass
+    # Strategy 2: rmdir() — works for empty directories AND Windows junctions
+    # (junctions are reparse-point directories; RemoveDirectoryW removes the
+    # reparse point without touching the target).
+    try:
+        link.rmdir()
+        return True
+    except OSError:
+        pass
+    return False
+
+
 def make_directory_link(target: Path, link: Path) -> None:
     """Create a directory symlink/junction at `link` pointing to `target`.
 
-    Replaces an existing link if present. If a regular directory exists at
-    the link path: empty → delete; kit-known content (file names match the
-    kit's) → delete (legacy file-based install); anything else → move aside
-    to `<link>.bak.<timestamp>` so nothing is silently destroyed.
+    Existing state handled:
+      - link is already a symlink/junction → removed and recreated.
+      - link is an empty directory → removed and replaced.
+      - link is a directory whose names match the kit's (legacy file-based
+        install) → removed and replaced.
+      - link is a directory with unknown contents → moved aside to
+        `<link>.bak.<timestamp>` so nothing is silently destroyed.
     """
     import time
 
-    if link.is_symlink() or (is_windows() and _is_windows_junction(link)):
-        link.unlink()
-    elif link.exists():
-        if link.is_dir():
-            contents = list(link.iterdir())
-            kit_known = {p.name for p in target.iterdir() if p.is_file()}
-            if not contents:
-                shutil.rmtree(link)
-            elif all(c.name in kit_known for c in contents):
-                # Legacy file-based install — same names as kit, safe to drop.
-                shutil.rmtree(link)
-            else:
-                # Unknown content — preserve it.
-                backup = link.with_name(f"{link.name}.bak.{int(time.time())}")
-                link.rename(backup)
-                warn(f"existing {link.name}/ moved to {backup.name}/ (had non-kit files)")
+    removed = _try_remove_link(link)
+
+    if not removed and link.exists() and link.is_dir():
+        contents = list(link.iterdir())
+        kit_known = {p.name for p in target.iterdir() if p.is_file()}
+        if not contents:
+            link.rmdir()
+        elif all(c.name in kit_known for c in contents):
+            shutil.rmtree(link)
         else:
-            link.unlink()
+            backup = link.with_name(f"{link.name}.bak.{int(time.time())}")
+            link.rename(backup)
+            warn(f"existing {link.name}/ moved to {backup.name}/ (had non-kit files)")
 
     link.parent.mkdir(parents=True, exist_ok=True)
 
-    # os.symlink with a directory target on Windows uses a directory symlink (needs
-    # developer mode) or junction (doesn't). For maximum compatibility we use
-    # mklink /J on Windows explicitly.
+    # Cross-platform creation:
+    #   Windows: directory junction via `mklink /J` — works without admin/dev-mode.
+    #   POSIX:   regular directory symlink.
     if is_windows():
         subprocess.run(
             ["cmd", "/c", "mklink", "/J", str(link), str(target)],
@@ -188,17 +217,6 @@ def make_directory_link(target: Path, link: Path) -> None:
         )
     else:
         os.symlink(target, link, target_is_directory=True)
-
-
-def _is_windows_junction(path: Path) -> bool:
-    """Detect a Windows junction (reparse point pointing at a directory)."""
-    if not is_windows() or not path.exists():
-        return False
-    try:
-        return bool(path.stat().st_reparse_tag)  # type: ignore[attr-defined]
-    except AttributeError:
-        # Fallback for older Python on Windows.
-        return os.path.isdir(path) and os.readlink(str(path)) != str(path)
 
 
 def copy_template_if_missing(template_name: str, target: Path) -> bool:
