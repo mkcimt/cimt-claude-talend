@@ -1,19 +1,27 @@
 #!/usr/bin/env python3
 """
-update.py — pull the latest cimt-claude-talend, report what changed.
+update.py — pull the latest cimt-claude-talend; optionally refresh a project.
 
-What it does:
-  1. `git pull` in the kit's repo.
-  2. Detect whether any SKILL.md or agent .md file changed. If yes, the user
-     needs to restart their Claude Code session for the new versions to take
-     effect (knowledge files reload automatically, skills don't).
+Two modes:
 
-Usage:
-    update.py
+  update.py
+    Just pulls the kit's repo. Reports what changed. Reminds you to re-run
+    install.py on consuming projects if templates changed.
+
+  update.py <project-path>
+    Pulls, then immediately re-runs install.py on that project so its
+    CLAUDE.md integration block, .gitignore, and symlinks are refreshed to
+    match the new kit version. This is what Claude calls when the user
+    says "update cimt-claude-talend" — `<project-path>` is the project the
+    user is currently working in.
+
+If skill or agent files changed, the user needs to restart their Claude Code
+session for those to take effect (knowledge files reload automatically).
 """
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -38,6 +46,10 @@ def git(args: list[str]) -> subprocess.CompletedProcess[str]:
 
 
 def main() -> int:
+    p = argparse.ArgumentParser(prog="update.py", description=__doc__)
+    p.add_argument("project", nargs="?", help="if given, run install.py on this project after the pull")
+    args = p.parse_args()
+
     head_before = git(["rev-parse", "HEAD"]).stdout.strip()
 
     print(f"{BOLD}Updating cimt-claude-talend{RESET}")
@@ -53,22 +65,44 @@ def main() -> int:
 
     if head_before == head_after:
         print(f"{GREEN}[OK]{RESET}    Already up to date.")
-        return 0
+        if args.project is None:
+            return 0
+        # Even if kit is up-to-date, run install.py on the project (cheap, ensures consistency).
 
-    # Summarise what changed.
-    diff = git(["diff", "--name-only", head_before, head_after]).stdout.strip()
-    changed = [line for line in diff.splitlines() if line]
-    print(f"{GREEN}[OK]{RESET}    Pulled {len(changed)} file change(s).")
+    if head_before != head_after:
+        diff = git(["diff", "--name-only", head_before, head_after]).stdout.strip()
+        changed = [line for line in diff.splitlines() if line]
+        print(f"{GREEN}[OK]{RESET}    Pulled {len(changed)} file change(s).")
 
-    skill_or_agent_changed = any(
-        f.startswith("skills/") or f.startswith("agents/") for f in changed
-    )
-    if skill_or_agent_changed:
+        skill_or_agent_changed = any(
+            f.startswith("skills/") or f.startswith("agents/") for f in changed
+        )
+        if skill_or_agent_changed:
+            print()
+            print(f"{YELLOW}{BOLD}Restart your Claude Code session{RESET} after this update "
+                  f"to pick up changes in skills/agents. Knowledge files load automatically.")
+
+    # Refresh the consuming project if one was given.
+    if args.project is not None:
+        project = Path(args.project).resolve()
+        if not project.is_dir():
+            print(f"{RED}[FAIL]{RESET}  not a directory: {project}")
+            return 1
         print()
-        print(f"{YELLOW}{BOLD}Restart your Claude Code session{RESET} to pick up changes "
-              f"in skills/agents. Knowledge files load automatically.")
+        print(f"{BOLD}Refreshing project: {project}{RESET}")
+        install_script = REPO_ROOT / "setup" / "install.py"
+        rc = subprocess.run(
+            [sys.executable, str(install_script), str(project)],
+            check=False,
+        ).returncode
+        if rc != 0:
+            return rc
     else:
-        print(f"{DIM}        Knowledge files only — no Claude restart needed.{RESET}")
+        # No project given — point the user at the next step.
+        if head_before != head_after:
+            print()
+            print(f"{DIM}        To refresh a project (CLAUDE.md, .gitignore, symlinks), run:{RESET}")
+            print(f"{DIM}        python {REPO_ROOT}/setup/install.py <project-path>{RESET}")
 
     return 0
 

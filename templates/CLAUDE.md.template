@@ -60,6 +60,10 @@ Build, publish, bind, promote, deploy, undeploy, redeploy, status, review — **
 
 The first time you load a knowledge file or invoke a skill in this session, run `$KIT/setup/doctor.py <project>` once. If it reports problems, surface them to the user with the fix hints and pause. If it reports OK, proceed silently — don't repeat doctor again in the same session.
 
+## Updates
+
+When the user asks to *"update cimt-claude-talend"* (or equivalent), run `python $KIT/setup/update.py <project>` — passing the current project path. The script pulls the kit's repo, reports what changed, then automatically re-runs install.py on the project so the CLAUDE.md integration block, .gitignore, and symlinks are refreshed in one go. If skills or agents changed, the script tells the user to restart their Claude Code session; surface that hint.
+
 ## Capture Discipline
 
 When a non-trivial insight surfaces during work:

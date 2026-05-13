@@ -229,6 +229,117 @@ def copy_template_if_missing(template_name: str, target: Path) -> bool:
     return True
 
 
+# Integration-block markers in CLAUDE.md.template — used to locate the kit-managed
+# region for in-place refresh on re-install.
+_BLOCK_COMMENT_PREFIX = "<!-- The block below is for Claude Code"
+_BLOCK_START_PREFIX = "> **cimt-claude-talend integration block — START."
+_BLOCK_END_PREFIX = "> **cimt-claude-talend integration block — END."
+
+
+def _find_integration_block(lines: list[str]) -> tuple[int, int] | None:
+    """Return (start_idx, end_idx) of the integration block in `lines`, or None.
+
+    Start index: the friendly HTML comment if present, else the `---` divider
+    before the START marker if present, else the START marker line.
+
+    End index: the closing `---` divider after the END marker if present, else
+    the END marker line.
+    """
+    start_idx = None
+    for i, line in enumerate(lines):
+        if line.startswith(_BLOCK_COMMENT_PREFIX):
+            start_idx = i
+            break
+        if line.startswith(_BLOCK_START_PREFIX):
+            # No HTML comment in this file — back up one line if a --- divider precedes.
+            if i > 0 and lines[i - 1].strip() == "---":
+                start_idx = i - 1
+            else:
+                start_idx = i
+            break
+    if start_idx is None:
+        return None
+
+    end_idx = None
+    marker_seen = False
+    for i in range(start_idx, len(lines)):
+        if lines[i].startswith(_BLOCK_END_PREFIX):
+            marker_seen = True
+            # Look ahead for a `---` divider, allowing blank lines in between.
+            j = i + 1
+            while j < len(lines) and not lines[j].strip():
+                j += 1
+            if j < len(lines) and lines[j].strip() == "---":
+                end_idx = j
+            else:
+                end_idx = i
+            break
+    return (start_idx, end_idx) if marker_seen else None
+
+
+def _backup_claude_md(claude_md: Path) -> Path:
+    """Copy CLAUDE.md to CLAUDE.md.bak.<timestamp>; prune older backups (keep latest 3)."""
+    import time
+
+    ts = time.strftime("%Y%m%d-%H%M%S")
+    backup = claude_md.with_suffix(f".md.bak.{ts}")
+    shutil.copy2(claude_md, backup)
+    # Keep the 3 most recent backups.
+    backups = sorted(
+        claude_md.parent.glob(f"{claude_md.name}.bak.*"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for old in backups[3:]:
+        try:
+            old.unlink()
+        except OSError:
+            pass
+    return backup
+
+
+def refresh_claude_md_block(project_dir: Path) -> str:
+    """Replace the kit-managed integration block in the project's CLAUDE.md.
+
+    Returns one of:
+      - "created"  — CLAUDE.md didn't exist; copied from template.
+      - "refreshed"— CLAUDE.md existed and the block was replaced.
+      - "unchanged"— CLAUDE.md existed and its block already matches the template.
+      - "skipped"  — CLAUDE.md existed but had no integration markers (manual
+                     hand-roll). Left untouched; caller should hint to the user.
+    """
+    claude_md = project_dir / "CLAUDE.md"
+    template_path = TEMPLATE_DIR / "CLAUDE.md.template"
+
+    if not claude_md.exists():
+        shutil.copy2(template_path, claude_md)
+        return "created"
+
+    template_lines = template_path.read_text(encoding="utf-8").splitlines()
+    template_block = _find_integration_block(template_lines)
+    if template_block is None:
+        # Shouldn't happen — template is the canonical source.
+        return "skipped"
+    t_start, t_end = template_block
+    block_text = "\n".join(template_lines[t_start:t_end + 1])
+
+    existing_lines = claude_md.read_text(encoding="utf-8").splitlines()
+    existing_block = _find_integration_block(existing_lines)
+    if existing_block is None:
+        return "skipped"
+    e_start, e_end = existing_block
+
+    existing_block_text = "\n".join(existing_lines[e_start:e_end + 1])
+    if existing_block_text == block_text:
+        return "unchanged"
+
+    _backup_claude_md(claude_md)
+
+    new_lines = existing_lines[:e_start] + block_text.splitlines() + existing_lines[e_end + 1:]
+    claude_md.write_text("\n".join(new_lines) + ("\n" if claude_md.read_text(encoding="utf-8").endswith("\n") else ""), encoding="utf-8")
+    return "refreshed"
+
+
 def update_gitignore(project_dir: Path) -> int:
     """Add the required entries to .gitignore. Returns count of new entries.
 
@@ -251,6 +362,11 @@ def update_gitignore(project_dir: Path) -> int:
         ".claude/settings.local.json",
         ".claude/talend.local.properties",
         ".claude/cimt-claude-talend.path",
+        # Match any 'worktrees' folder anywhere in the tree — Claude or the user
+        # may drop git worktrees inside the project (commonly under .claude/) and
+        # those must never be committed.
+        "worktrees/",
+        ".worktrees/",
     ]
 
     if not gitignore.exists():
@@ -416,11 +532,17 @@ def install(project_dir: Path) -> int:
         fail(f"could not create directory link: {e}")
         return 1
 
-    # 3. CLAUDE.md template.
-    if copy_template_if_missing("CLAUDE.md.template", project_dir / "CLAUDE.md"):
+    # 3. CLAUDE.md — create from template if missing, refresh integration block if present.
+    status = refresh_claude_md_block(project_dir)
+    if status == "created":
         ok("CLAUDE.md created from template")
-    else:
-        ok("CLAUDE.md already exists (left untouched)")
+    elif status == "refreshed":
+        ok("CLAUDE.md integration block refreshed (previous version backed up to CLAUDE.md.bak.*)")
+    elif status == "unchanged":
+        ok("CLAUDE.md integration block already up to date")
+    elif status == "skipped":
+        warn("CLAUDE.md exists but has no integration-block markers — merge the block manually")
+        info(f"see {TEMPLATE_DIR / 'CLAUDE.md.template'}")
 
     # 4. talend.properties + talend.local.properties.
     if copy_template_if_missing("talend.properties.example", claude_dir / "talend.properties"):
