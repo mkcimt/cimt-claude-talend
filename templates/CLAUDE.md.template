@@ -1,0 +1,45 @@
+---
+
+> **cimt-claude-talend integration block — START.** Do not edit content inside this block. To upgrade, replace the block wholesale from [`templates/CLAUDE.md.template`](https://github.com/mkcimt/cimt-claude-talend/blob/main/templates/CLAUDE.md.template) in the cimt-claude-talend repo. Add your project-specific content (description, repo layout, conventions, git rules, user profile) **above** this marker or **below** the end marker.
+
+## cimt-claude-talend integration
+
+This project uses the [cimt-claude-talend](https://github.com/mkcimt/cimt-claude-talend) toolkit. The local checkout path lives in the environment variable `CIMT_TALEND_PATTERNS` (set per developer by `setup/install.sh`). Skills and agents are symlinked into this project's `.claude/`.
+
+When the user asks about anything Talend-mechanical, **consult `$CIMT_TALEND_PATTERNS/knowledge/` first** — see `$CIMT_TALEND_PATTERNS/knowledge/INDEX.md` for the index. Topics covered:
+
+- Reading `.item` files, Studio quirks, citation conventions — `knowledge/mechanics/`
+- TMC API, deploy / promote / bind, microservice lifecycle, known bugs — `knowledge/tmc/`
+- Maven build, Cloud Publisher, headless release runbook — `knowledge/build-publish/`
+- Optional Talend patterns (context variables, batch frameworks, …) — `knowledge/patterns/`. Each pattern file explains how to **detect from the project's artifacts** which variant is in use — derive from the code, don't expect a pre-declaration.
+- Code review principles and Talend heuristics — `knowledge/code-review/`
+- Interface documentation conventions — `knowledge/documentation/`
+
+Prefer these files over guessing from training data. They are empirically maintained.
+
+## Editing protocol — `.item` files
+
+**Hard rule:** whenever you edit a `.item` file (`Edit`, `MultiEdit`, `Write`), update the sibling `.properties` file's `modified_date` and `modified_product_version` in the **same turn** and commit both files together. Studio does this automatically on its own saves; for code-only edits you do it. See `$CIMT_TALEND_PATTERNS/knowledge/mechanics/item-properties-touch.md` for the exact fields and the helper script (`tools/touch_item_properties.py`).
+
+## Capture Discipline
+
+When a non-trivial insight surfaces during work:
+
+1. Classify the layer:
+   - **2a** — universal Talend truth (mechanics, TMC API behaviour, Studio quirks)
+   - **2b** — optional pattern (a framework, a component a project may or may not use)
+   - **3** — project-specific (this project's conventions, business glossary, KEDB)
+   - **4** — developer-specific (paths, personal preferences, machine setup)
+2. Route accordingly:
+   - 2a / 2b → cimt-claude-talend repo (`$CIMT_TALEND_PATTERNS`), file under `knowledge/...`
+   - 3 → this project, under `docs/`
+   - 4 → user memory or `.claude/settings.local.json`
+3. **Memory is for Layer 4 only.** Anything that should survive `rm -rf ~/.claude` belongs in a repo.
+
+If classification is unclear, ask once. Default to Layer 3 unless you can articulate the mechanic.
+
+See `$CIMT_TALEND_PATTERNS/CONTRIBUTING.md` for the full capture flow.
+
+> **cimt-claude-talend integration block — END.**
+
+---
