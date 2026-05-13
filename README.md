@@ -19,8 +19,8 @@ You need: **Python 3.9+**, **git**, and **Claude Code** installed. That's it.
 > Example layout (Windows, names are illustrative):
 >
 > ```
-> C:\Talend\Talend-Studio-Shimano\workspace\        ← Studio workspace (NOT this one)
->   └── talend-dare-816295992\                      ← your project (THIS one — has .git/)
+> C:\Talend\Talend-Studio\workspace\                ← Studio workspace (NOT this one)
+>   └── my-talend-project\                          ← your project (THIS one — has .git/)
 >         ├── .git\
 >         ├── MY_TALEND_PROJECT\
 >         │     └── talend.project                  ← Talend's project descriptor
@@ -34,7 +34,7 @@ Run **one command** (pick your shell):
 ```powershell
 # Windows (PowerShell)
 git clone https://github.com/mkcimt/cimt-claude-talend.git C:\dev\cimt-claude-talend
-C:\dev\cimt-claude-talend\setup\bootstrap.ps1 C:\Talend\Talend-Studio-Shimano\workspace\talend-dare-816295992
+C:\dev\cimt-claude-talend\setup\bootstrap.ps1 C:\Talend\Talend-Studio\workspace\my-talend-project
 ```
 
 ```bash
