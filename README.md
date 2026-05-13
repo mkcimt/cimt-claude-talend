@@ -160,6 +160,20 @@ Removes the symlinks. Leaves `CLAUDE.md` and `talend.properties` alone (those ar
 
 ---
 
+## About
+
+cimt-claude-talend is built and maintained by **Mirco Kriesten** at **cimt** — an IT consulting firm with a focus on data integration, data management, data governance, BI, and the Talend platform. The kit grew out of cimt's day-to-day work running and modernising customer Talend installations: the conventions, the TMC bug workarounds, the Studio reading patterns are all empirically earned.
+
+**Getting in touch:**
+
+- **Bugs or feature ideas** — open an issue on this repo.
+- **Questions about the kit, or about using Claude Code with Talend in general** — [mirco.kriesten@cimt-ag.de](mailto:mirco.kriesten@cimt-ag.de).
+- **Looking for professional support** — Talend implementation, migration, managed services, or any of the wider data management / data governance / BI / cloud data platform topics — see **[cimt-ag.de](https://www.cimt-ag.de)** (DE) / **[cimt.nl](https://www.cimt.nl)** (NL), or reach out directly.
+
+If you find this useful at a customer engagement: a mention or a link back is appreciated.
+
+---
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
