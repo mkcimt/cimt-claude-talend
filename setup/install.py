@@ -341,6 +341,41 @@ def cleanup_legacy_json_config(project_dir: Path) -> bool:
     return False
 
 
+def looks_like_talend_project(path: Path) -> bool:
+    """A Talend project root contains a subfolder with a `talend.project` file."""
+    if not path.is_dir():
+        return False
+    for sub in path.iterdir():
+        if sub.is_dir() and (sub / "talend.project").is_file():
+            return True
+    return False
+
+
+def suggest_correct_project_path(given: Path) -> str | None:
+    """If `given` is the wrong level, find a plausible correct path and return it.
+
+    Common mistakes:
+      - one level too deep: `given` itself contains `talend.project`. Suggest parent.
+      - one level too high (Studio workspace): subfolders are Talend project roots.
+        Suggest the first/all of them.
+    """
+    if not given.is_dir():
+        return None
+    # Too deep: user gave the inner Talend project folder.
+    if (given / "talend.project").is_file():
+        return f"the parent: {given.parent}"
+    # Too high: maybe a Studio workspace. Look for grandchildren with talend.project.
+    candidates = []
+    for sub in given.iterdir():
+        if sub.is_dir() and looks_like_talend_project(sub):
+            candidates.append(str(sub))
+    if candidates:
+        if len(candidates) == 1:
+            return f"the project subfolder: {candidates[0]}"
+        return "one of these project subfolders:\n        " + "\n        ".join(candidates)
+    return None
+
+
 def install(project_dir: Path) -> int:
     print(f"cimt-claude-talend → installing into {project_dir}")
     print(f"{DIM}        kit at {REPO_ROOT}{RESET}")
@@ -350,6 +385,19 @@ def install(project_dir: Path) -> int:
         fail(f"not a directory: {project_dir}")
         return 1
     project_dir = project_dir.resolve()
+
+    # Pre-flight: confirm this looks like a Talend project root.
+    if not looks_like_talend_project(project_dir):
+        fail(f"this does not look like a Talend project root: {project_dir}")
+        info("a Talend project root contains a subfolder with a `talend.project` file inside")
+        info("(typically a git repository root, not the Studio workspace folder)")
+        suggestion = suggest_correct_project_path(project_dir)
+        if suggestion:
+            print(f"{YELLOW}        Did you mean {suggestion}?{RESET}")
+        print()
+        info("re-run install.py with the correct path. No changes were made.")
+        return 1
+
     claude_dir = project_dir / ".claude"
 
     # 1. Marker file in the project — primary mechanism for Claude to find the kit.

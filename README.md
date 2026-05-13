@@ -14,12 +14,27 @@ This repo gives Claude that missing context, plus a small set of ready-made comm
 
 You need: **Python 3.9+**, **git**, and **Claude Code** installed. That's it.
 
+> **Which folder is "your Talend project"?** The folder that contains your project as a git repository — usually one level *inside* your Talend Studio workspace, **not** the workspace folder itself. The right folder has a subfolder with a `talend.project` file inside it.
+>
+> Example layout (Windows, names are illustrative):
+>
+> ```
+> C:\Talend\Talend-Studio-Shimano\workspace\        ← Studio workspace (NOT this one)
+>   └── talend-dare-816295992\                      ← your project (THIS one — has .git/)
+>         ├── .git\
+>         ├── MY_TALEND_PROJECT\
+>         │     └── talend.project                  ← Talend's project descriptor
+>         └── docs\
+> ```
+>
+> If you pick the wrong level, the installer says so and suggests the right one.
+
 Run **one command** (pick your shell):
 
 ```powershell
 # Windows (PowerShell)
 git clone https://github.com/mkcimt/cimt-claude-talend.git C:\dev\cimt-claude-talend
-C:\dev\cimt-claude-talend\setup\bootstrap.ps1 C:\path\to\your\talend-project
+C:\dev\cimt-claude-talend\setup\bootstrap.ps1 C:\Talend\Talend-Studio-Shimano\workspace\talend-dare-816295992
 ```
 
 ```bash
