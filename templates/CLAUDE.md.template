@@ -56,6 +56,12 @@ Two config files in this project's `.claude/`:
 
 Build, publish, bind, promote, deploy, undeploy, redeploy, status, review — **always read live state** from the project files and TMC. Never trust cached summaries, previous-session outputs, or values that may be stale. Documentation commands may consult inventories but must verify live behaviour where it matters. Full principle: `$KIT/knowledge/mechanics/operational-vs-documentation.md`.
 
+## Scratch files — `.claude/tmp/`
+
+Any temporary script, JSON dump, report, or one-off helper you generate during a session **must** be written to `.claude/tmp/` in the project root (create the directory if it doesn't exist). The folder is gitignored, so Studio's Git Staging view won't surface noise from Claude's working files.
+
+**Never** drop scratch files in the project root, in `.claude/` directly, or anywhere under `TALEND_DARE/` — those locations end up either tracked by git or flagged as untracked changes by Studio. See `$KIT/knowledge/mechanics/scratch-files.md` for the full rule.
+
 ## Doctor on first use
 
 The first time you load a knowledge file or invoke a skill in this session, run `$KIT/setup/doctor.py <project>` once. If it reports problems, surface them to the user with the fix hints and pause. If it reports OK, proceed silently — don't repeat doctor again in the same session.

@@ -11,6 +11,7 @@ How Talend Studio and its artifacts actually work. No project-level choice invol
 - [`studio-noise-filter.md`](mechanics/studio-noise-filter.md) — Diff noise patterns Studio writes on save; what to ignore vs. what to review.
 - [`git-workflow.md`](mechanics/git-workflow.md) — Feature branch discipline, worktrees alongside Studio, push protocol.
 - [`operational-vs-documentation.md`](mechanics/operational-vs-documentation.md) — Read-live principle: build/deploy/promote/review must read live state; documentation may cache with explicit staleness markers.
+- [`scratch-files.md`](mechanics/scratch-files.md) — Where Claude's temporary working files go: `.claude/tmp/` (gitignored, invisible to Studio's Git Staging).
 
 ## `patterns/` — Layer 2b: Optional patterns
 

@@ -370,6 +370,9 @@ def update_gitignore(project_dir: Path) -> int:
         # CLAUDE.md backups created by refresh_claude_md_block() — local recovery
         # files, last 3 kept on disk, never for git.
         "CLAUDE.md.bak.*",
+        # Claude's session-scratch directory — see knowledge/mechanics/scratch-files.md.
+        # All temporary scripts, JSON dumps, reports must go here, not in .claude/ directly.
+        ".claude/tmp/",
     ]
 
     if not gitignore.exists():
