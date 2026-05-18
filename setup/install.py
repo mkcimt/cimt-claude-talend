@@ -367,6 +367,9 @@ def update_gitignore(project_dir: Path) -> int:
         # those must never be committed.
         "worktrees/",
         ".worktrees/",
+        # CLAUDE.md backups created by refresh_claude_md_block() — local recovery
+        # files, last 3 kept on disk, never for git.
+        "CLAUDE.md.bak.*",
     ]
 
     if not gitignore.exists():

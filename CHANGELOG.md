@@ -6,7 +6,9 @@ All notable changes to **cimt-claude-talend** are documented here. The format fo
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+
+- `install.py` now adds `CLAUDE.md.bak.*` to the default `.gitignore` entries — the timestamped backups it creates when refreshing the integration block are local recovery files and should not appear in `git status`.
 
 ## [0.2.0] — 2026-05-13
 
