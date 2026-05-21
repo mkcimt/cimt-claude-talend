@@ -363,12 +363,22 @@ def _is_windows_junction(path: Path) -> bool:
     if not is_windows() or not path.exists():
         return False
     try:
-        return bool(path.stat().st_reparse_tag)  # type: ignore[attr-defined]
-    except AttributeError:
+        return bool(os.lstat(path).st_reparse_tag)  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
         return False
 
 
 def main(argv: list[str]) -> int:
+    # Windows consoles default to cp1252; the report contains characters like
+    # U+2192 (→) that can't encode there. Force UTF-8 so doctor doesn't crash
+    # mid-report. Replace-on-error means a truly hopeless codec still prints
+    # something instead of raising.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except (AttributeError, OSError):
+            pass
+
     p = argparse.ArgumentParser(prog="doctor.py", description=__doc__)
     p.add_argument("project", nargs="?", help="absolute path to your Talend project (optional)")
     args = p.parse_args(argv)
