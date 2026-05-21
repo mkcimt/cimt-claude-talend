@@ -6,6 +6,11 @@ All notable changes to **cimt-claude-talend** are documented here. The format fo
 
 ## [Unreleased]
 
+### Fixed
+
+- **`doctor.py` no longer crashes on Windows consoles with cp1252.** The report contains characters like `→` that the default Windows code page can't encode. `main()` now reconfigures `sys.stdout`/`sys.stderr` to UTF-8 (errors=replace) before any output.
+- **`doctor.py` now recognises Windows directory junctions as kit links.** `_is_windows_junction()` previously called `path.stat()`, which follows the junction and returns the target's metadata (no `st_reparse_tag`), causing junctions to be reported as "regular directory, not a kit link". Switched to `os.lstat()` so the reparse tag of the link itself is checked.
+
 ## [0.3.0] — 2026-05-18
 
 ### Added
