@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-TMC microservice ops — list / undeploy / redeploy all i5xx APIs in an env.
+TMC microservice ops — list / undeploy / redeploy i5xx APIs in an env.
 
 Usage:
-    python tmc_microservice_ops.py list      --env dev|tst|uat|prd
-    python tmc_microservice_ops.py undeploy  --env dev|tst        [--dry-run]
-    python tmc_microservice_ops.py redeploy  --env dev|tst        [--dry-run]
-    python tmc_microservice_ops.py cycle     --env dev|tst        [--dry-run]
+    python tmc_microservice_ops.py list      --env dev|tst|uat|prd  [--name <substr>]
+    python tmc_microservice_ops.py undeploy  --env dev|tst          [--name <substr>] [--dry-run]
+    python tmc_microservice_ops.py redeploy  --env dev|tst          [--name <substr>] [--dry-run]
+    python tmc_microservice_ops.py cycle     --env dev|tst          [--name <substr>] [--dry-run]
         # cycle = undeploy + redeploy
+
+--name filters by substring match against the API name (e.g. --name i556_api_user).
+Without --name all i5xx APIs in the env are targeted.
 
 Destructive ops (undeploy / redeploy / cycle) are HARD-LIMITED to dev + tst.
 For uat / prd use the TMC UI — see cimt-talend/docs/tmc-task-management.md.
@@ -105,9 +108,19 @@ def deploy_task(task_id: str, token: str) -> str | None:
     return res.get("executionId") if ok else None
 
 
-def cmd_list(env: str, token: str) -> int:
-    tasks = list_tasks(ENV_IDS[env], token)
-    print(f"=== {env}: {len(tasks)} i5xx tasks ===\n")
+def filter_tasks(tasks: list[dict], name: str | None) -> list[dict]:
+    if not name:
+        return tasks
+    matched = [t for t in tasks if name.lower() in t["name"].lower()]
+    if not matched:
+        sys.exit(f"No tasks found matching --name {name!r}.")
+    return matched
+
+
+def cmd_list(env: str, token: str, name: str | None = None) -> int:
+    tasks = filter_tasks(list_tasks(ENV_IDS[env], token), name)
+    label = f"matching '{name}'" if name else "i5xx"
+    print(f"=== {env}: {len(tasks)} {label} tasks ===\n")
     print(f"{'API':<40} {'TaskId':<26} {'#Exec':>5}  {'Latest status':<22}")
     print("-" * 100)
     for t in tasks:
@@ -123,9 +136,9 @@ def _guard_destructive(env: str) -> None:
                  f"Allowed: {sorted(WRITE_ALLOWED_ENVS)}. Use TMC UI for uat/prd.")
 
 
-def cmd_undeploy(env: str, token: str, dry_run: bool) -> int:
+def cmd_undeploy(env: str, token: str, dry_run: bool, name: str | None = None) -> int:
     _guard_destructive(env)
-    tasks = list_tasks(ENV_IDS[env], token)
+    tasks = filter_tasks(list_tasks(ENV_IDS[env], token), name)
     print(f"{'[DRY RUN] ' if dry_run else ''}Undeploying running microservices on {env} "
           f"({len(tasks)} tasks)\n")
 
@@ -158,9 +171,9 @@ def cmd_undeploy(env: str, token: str, dry_run: bool) -> int:
     return 0
 
 
-def cmd_redeploy(env: str, token: str, dry_run: bool) -> int:
+def cmd_redeploy(env: str, token: str, dry_run: bool, name: str | None = None) -> int:
     _guard_destructive(env)
-    tasks = list_tasks(ENV_IDS[env], token)
+    tasks = filter_tasks(list_tasks(ENV_IDS[env], token), name)
     print(f"{'[DRY RUN] ' if dry_run else ''}Redeploying microservices on {env} "
           f"({len(tasks)} tasks)\n")
 
@@ -184,13 +197,13 @@ def cmd_redeploy(env: str, token: str, dry_run: bool) -> int:
     return 0
 
 
-def cmd_cycle(env: str, token: str, dry_run: bool) -> int:
-    rc = cmd_undeploy(env, token, dry_run)
+def cmd_cycle(env: str, token: str, dry_run: bool, name: str | None = None) -> int:
+    rc = cmd_undeploy(env, token, dry_run, name)
     if rc != 0:
         return rc
     if not dry_run:
         time.sleep(5)  # let the engine release the ports
-    return cmd_redeploy(env, token, dry_run)
+    return cmd_redeploy(env, token, dry_run, name)
 
 
 def main() -> int:
@@ -200,6 +213,9 @@ def main() -> int:
     for c in ("list", "undeploy", "redeploy", "cycle"):
         sp = sub.add_parser(c)
         sp.add_argument("--env", required=True, choices=list(ENV_IDS))
+        sp.add_argument("--name", default=None,
+                        help="Filter by substring of API name (e.g. i556_api_user). "
+                             "Without this flag all i5xx APIs are targeted.")
         if c != "list":
             sp.add_argument("--dry-run", action="store_true")
     args = p.parse_args()
@@ -209,13 +225,13 @@ def main() -> int:
         sys.exit("TALEND_PAT env var is not set.")
 
     if args.cmd == "list":
-        return cmd_list(args.env, token)
+        return cmd_list(args.env, token, args.name)
     if args.cmd == "undeploy":
-        return cmd_undeploy(args.env, token, args.dry_run)
+        return cmd_undeploy(args.env, token, args.dry_run, args.name)
     if args.cmd == "redeploy":
-        return cmd_redeploy(args.env, token, args.dry_run)
+        return cmd_redeploy(args.env, token, args.dry_run, args.name)
     if args.cmd == "cycle":
-        return cmd_cycle(args.env, token, args.dry_run)
+        return cmd_cycle(args.env, token, args.dry_run, args.name)
     return 2
 
 
