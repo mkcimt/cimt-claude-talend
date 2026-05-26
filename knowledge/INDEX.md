@@ -8,6 +8,9 @@ How Talend Studio and its artifacts actually work. No project-level choice invol
 
 - [`item-file-format.md`](mechanics/item-file-format.md) — Reading `.item` files, tMap XML caveats, picking the right version, citation conventions.
 - [`item-properties-touch.md`](mechanics/item-properties-touch.md) — Why `.properties` siblings must be touched on `.item` edits (TMC `repository.commit.id` tracking).
+- [`item-editing-programmatic.md`](mechanics/item-editing-programmatic.md) — Hard rules and pre-edit checklist for editing `.item` files from outside Studio: CRLF line endings, `<elementParameter>`-internal id uniqueness, UTF-8 (no BOM), embedded-entity preservation.
+- [`joblet-inlining.md`](mechanics/joblet-inlining.md) — Joblets are inlined templates, not function calls. Sizing formula for generated `.java`, JDT formatter OOM threshold, Joblet → Job refactoring trade-off.
+- [`studio-clean-and-codegen.md`](mechanics/studio-clean-and-codegen.md) — Studio has no Project → Clean menu. Forcing a regenerate by hand. Diagnosing `processCode is null` (always a downstream symptom — read `.metadata/.log` for the real cause).
 - [`studio-noise-filter.md`](mechanics/studio-noise-filter.md) — Diff noise patterns Studio writes on save; what to ignore vs. what to review.
 - [`git-workflow.md`](mechanics/git-workflow.md) — Feature branch discipline, worktrees alongside Studio, push protocol.
 - [`operational-vs-documentation.md`](mechanics/operational-vs-documentation.md) — Read-live principle: build/deploy/promote/review must read live state; documentation may cache with explicit staleness markers.

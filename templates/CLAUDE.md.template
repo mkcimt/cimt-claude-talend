@@ -30,7 +30,19 @@ Prefer these files over guessing from training data. They are empirically mainta
 
 ## Editing protocol — `.item` files
 
-**Hard rule:** whenever you edit a `.item` file (`Edit`, `MultiEdit`, `Write`), update the sibling `.properties` file's `modified_date` and `modified_product_version` in the **same turn** and commit both files together. Studio does this automatically on its own saves; for code-only edits you do it. See `$KIT/knowledge/mechanics/item-properties-touch.md` for the exact fields and the helper script (`tools/touch_item_properties.py`).
+`.item` files are deceptively edit-friendly XML with several Studio-only invariants. Before touching one, **read `$KIT/knowledge/mechanics/item-editing-programmatic.md` once** and run through its pre-edit checklist for every write.
+
+**Hard rules — non-negotiable:**
+
+1. **Line endings stay CRLF on Windows.** Talend Studio writes `.item` with CRLF; the project convention is CRLF; mixing LF into one file while siblings are CRLF interacts badly with code-gen. Verify with `file <path>` after every write. Programmatic writes should use binary I/O (`read_bytes` / `write_bytes`) or explicit `newline=""` — never bare `Path.write_text` on Windows. Full rationale and verification commands in `item-editing-programmatic.md`.
+2. **Sibling `.properties` touch.** Update `modificationDate` and `productVersion` in the same turn and commit both files together. Use the helper: `python $KIT/tools/touch_item_properties.py <path>`. Studio does this automatically on its own saves; code-only edits do it explicitly. Detail in `$KIT/knowledge/mechanics/item-properties-touch.md`.
+3. **`<elementParameter>`-internal id uniqueness.** When cloning a block that contains `id="N"` attributes (TRACE_COLUMN lists, MAPPING tables, SCHEMA_COLUMN lists, etc.), bump every id by a high constant so the clone doesn't collide with the original. Verify with the `Counter`-based snippet in `item-editing-programmatic.md`.
+4. **Embedded entity preservation.** `&#xD;&#xA;`, `&#13;&#10;`, `&#x9;` etc. inside MEMO_JAVA / MEMO_SQL values must survive byte-for-byte. Never decode them to literal newlines / tabs.
+5. **Post-edit verification.** Re-check CRLF, re-check no duplicate ids, re-check XML parses, re-check `git diff` shows only the intended change (not a whole-file diff caused by line-ending flip).
+
+**Before doing heavy schema additions:** if the affected joblet is inlined many times by a route (`grep -c 'componentName="<joblet>"' <route>.item`), measure the multiplier — see `$KIT/knowledge/mechanics/joblet-inlining.md`. Adding one column to a heavily inlined joblet's schema can add hundreds of KB to the generated `.java`. The Eclipse JDT code formatter starts OOMing on generated files past ~30 MB; the route may compile fine before your change and fail after.
+
+**When code-gen fails after a `.item` edit:** the visible NPE `Cannot invoke "String.getBytes()" because "processCode" is null` is almost always a downstream symptom. Open `<workspace>/.metadata/.log`, find the error preceding the NPE — usually an `OutOfMemoryError` in `DefaultCodeFormatter`. Diagnosis flow in `$KIT/knowledge/mechanics/studio-clean-and-codegen.md` (which also documents how to force a regenerate — Studio has no Project → Clean menu, you do it by hand).
 
 ## Configuration discovery
 
