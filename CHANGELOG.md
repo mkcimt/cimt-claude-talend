@@ -6,6 +6,16 @@ All notable changes to **cimt-claude-talend** are documented here. The format fo
 
 ## [Unreleased]
 
+### Added
+
+- **`knowledge/mechanics/item-editing-programmatic.md`** — hard rules and pre-edit checklist for editing `.item` files from outside Studio. Documents the CRLF-on-Windows requirement (which Python `Path.write_text` silently violates), `<elementParameter>`-internal id uniqueness when cloning blocks, UTF-8-without-BOM, and embedded-entity (`&#xD;&#xA;`, `&#13;&#10;`, `&#x9;`) preservation. Includes verification snippets to run after every write.
+- **`knowledge/mechanics/joblet-inlining.md`** — Talend joblets are inlined templates, not function calls. Documents the multiplication formula (`N_invocations × N_components`), the JDT-formatter-OOM threshold (~30 MB generated `.java` at 4 GB heap), and the Joblet → Job refactoring trade-off when a route's generated code is bloating.
+- **`knowledge/mechanics/studio-clean-and-codegen.md`** — Talend Studio has no Project → Clean menu. Documents the four ways to force a regenerate (manual cache wipe, Code tab, `mvn clean`, `-Dtalend.studio.m2.clean=true`) and the diagnostic flow for `processCode is null` — which is almost always a downstream symptom of an OOM or generator failure logged earlier in `.metadata/.log`.
+
+### Changed
+
+- **`templates/CLAUDE.md.template` — editing protocol section rewritten.** Was: a one-paragraph rule about touching `.properties`. Now: five numbered hard rules covering line endings, id uniqueness, entity preservation, and post-edit verification, plus pointers to the three new mechanics docs. Adopters refresh the integration block by re-running `setup/install.py` (or `setup/update.py`).
+
 ### Fixed
 
 - **`doctor.py` no longer crashes on Windows consoles with cp1252.** The report contains characters like `→` that the default Windows code page can't encode. `main()` now reconfigures `sys.stdout`/`sys.stderr` to UTF-8 (errors=replace) before any output.
