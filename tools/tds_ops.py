@@ -157,6 +157,20 @@ def build_demo_campaign(name: str, datamodel_name: str, owner: str, *,
     }
 
 
+def build_demo_semantic_regex(name: str) -> dict:
+    """A self-contained REGEX semantic type (the documented edit-sandbox shape)."""
+    return {
+        "name": name,
+        "label": name,
+        "type": "REGEX",
+        "validationMode": "EXACT_IGNORE_CASE_AND_ACCENT",
+        "regEx": {
+            "mainCategory": "AlphaNumeric",
+            "validator": {"patternString": "^CIMT-[0-9]{4}$"},
+        },
+    }
+
+
 RUN_LOG = Path(__file__).resolve().parents[1] / ".claude" / "tmp" / "tds-run.json"
 
 
@@ -373,6 +387,65 @@ def cmd_semantic_get(client: tc.TdsClient, args) -> int:
     return 0
 
 
+def _poll_draft_status(client: tc.TdsClient, cid: str, tries: int = 12) -> str:
+    """Poll the async draft-save status until terminal (FINISH) or attempts run out."""
+    for _ in range(tries):
+        st = client.get(f"{SEM}/v2/categories/{cid}/draft/status")
+        val = st.get("status") if isinstance(st, dict) else st
+        if str(val).upper() in ("FINISH", "FINISHED", "DONE", "PUBLISH", "OK"):
+            return str(val)
+        time.sleep(1)
+    return str(val) if "val" in dir() else "UNKNOWN"
+
+
+def cmd_semantic_create(client: tc.TdsClient, args) -> int:
+    """Orchestrate the sandbox -> edit -> draft -> publish lifecycle."""
+    if args.demo:
+        name = args.name or ("CIMT_DEMO_" + str(int(time.time())))
+        edit_body = build_demo_semantic_regex(name)
+    else:
+        edit_body = load_body(args)
+        name = edit_body.get("name", "?")
+    if client.dry_run:
+        print(f"[dry-run] semantic create lifecycle for {name!r}:")
+        print(f"  1) POST   {SEM}/categories/sandbox            -> {{id}}")
+        print(f"  2) PATCH  {SEM}/categories/{{id}}  body:")
+        print(json.dumps(edit_body, indent=2, ensure_ascii=False))
+        print(f"  3) PATCH  {SEM}/v2/categories/{{id}}/draft     (async)")
+        print(f"  4) GET    {SEM}/v2/categories/{{id}}/draft/status  (poll)")
+        print(f"  5) POST   {SEM}/categories/{{id}}/publish")
+        return 0
+    sandbox = client.post(f"{SEM}/categories/sandbox") or {}
+    cid = sandbox.get("id")
+    if not cid:
+        sys.exit(f"sandbox create returned no id: {sandbox!r}")
+    print(f"  sandbox created : {cid}")
+    client.patch(f"{SEM}/categories/{cid}", edit_body)
+    print(f"  edited          : {edit_body.get('type')} '{name}'")
+    client.patch(f"{SEM}/v2/categories/{cid}/draft")
+    print(f"  draft status    : {_poll_draft_status(client, cid)}")
+    client.post(f"{SEM}/categories/{cid}/publish")
+    print(f"Published semantic type: {name} (id {cid})")
+    log_created("semantic", cid)
+    return 0
+
+
+def cmd_semantic_publish(client: tc.TdsClient, args) -> int:
+    client.post(f"{SEM}/categories/{args.id}/publish")
+    if client.dry_run:
+        return 0
+    print(f"Published semantic type: {args.id}")
+    return 0
+
+
+def cmd_semantic_delete(client: tc.TdsClient, args) -> int:
+    client.delete(f"{SEM}/categories/{args.id}")
+    if client.dry_run:
+        return 0
+    print(f"Deleted semantic type: {args.id}")
+    return 0
+
+
 # --------------------------------------------------------------------------
 # Tasks & DQ rules — no REST API (honest info verbs, not no-ops)
 # --------------------------------------------------------------------------
@@ -459,6 +532,13 @@ def build_parser() -> argparse.ArgumentParser:
     sma = sm.add_subparsers(dest="action", required=True)
     s = sma.add_parser("list"); s.add_argument("--name"); _add_json(s)
     s = sma.add_parser("get"); s.add_argument("key", help="semantic type id or name"); _add_json(s)
+    s = sma.add_parser("create", help="sandbox->edit->draft->publish lifecycle")
+    s.add_argument("--name", help="semantic type name (with --demo) or override")
+    s.add_argument("--file", help="edit-body JSON path, or - for stdin")
+    s.add_argument("--demo", action="store_true", help="built-in REGEX demo semantic type")
+    _add_apply(s)
+    s = sma.add_parser("publish"); s.add_argument("id"); _add_apply(s)
+    s = sma.add_parser("delete"); s.add_argument("id"); _add_apply(s)
 
     # task / dqrule — info only (no REST API)
     tk = obj.add_parser("task", help="tasks (no REST API — see info)")
@@ -482,6 +562,9 @@ DISPATCH = {
     ("campaign", "delete"): cmd_campaign_delete,
     ("semantic", "list"): cmd_semantic_list,
     ("semantic", "get"): cmd_semantic_get,
+    ("semantic", "create"): cmd_semantic_create,
+    ("semantic", "publish"): cmd_semantic_publish,
+    ("semantic", "delete"): cmd_semantic_delete,
     ("task", "info"): cmd_task_info,
     ("dqrule", "info"): cmd_dqrule_info,
 }

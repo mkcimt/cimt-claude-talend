@@ -100,6 +100,25 @@ class TestDemoBuilders(unittest.TestCase):
         self.assertIn("-", ops.demo_name("-"))
         self.assertNotIn("_", ops.demo_name("-"))
 
+    def test_demo_semantic_regex_shape(self):
+        s = ops.build_demo_semantic_regex("CIMT_DEMO_X")
+        self.assertEqual(s["type"], "REGEX")
+        self.assertEqual(s["name"], "CIMT_DEMO_X")
+        self.assertIn("patternString", s["regEx"]["validator"])
+
+
+class TestSemanticParsing(unittest.TestCase):
+    def setUp(self):
+        self.p = ops.build_parser()
+
+    def test_semantic_create_demo(self):
+        a = self.p.parse_args(["semantic", "create", "--demo", "--name", "S", "--apply"])
+        self.assertTrue(a.demo and a.apply and a.name == "S")
+
+    def test_semantic_delete(self):
+        a = self.p.parse_args(["semantic", "delete", "abc123", "--apply"])
+        self.assertEqual((a.object, a.action, a.id), ("semantic", "delete", "abc123"))
+
 
 class TestDispatchTable(unittest.TestCase):
     def test_all_dispatch_keys_have_handlers(self):
