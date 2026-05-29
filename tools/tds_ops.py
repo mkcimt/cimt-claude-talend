@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -78,6 +79,107 @@ def filter_by_name(items: list[dict], name: str | None, *, key: str = "name",
     return matched
 
 
+def load_body(args) -> dict:
+    """Read a JSON request body from --file PATH or stdin (--file -)."""
+    src = getattr(args, "file", None)
+    if not src:
+        sys.exit("This write verb needs --file PATH (JSON body) or --demo.")
+    text = sys.stdin.read() if src == "-" else Path(src).read_text(encoding="utf-8")
+    try:
+        return json.loads(text)
+    except ValueError as e:
+        sys.exit(f"--file is not valid JSON: {e}")
+
+
+# Demo payload builders — the documented example shapes, namespaced so live
+# runs are self-contained and identifiable. See knowledge/tds/api-reference.md.
+DEMO_PRODUCT_FIELDS = [
+    {"name": "Id", "displayName": "Id", "type": "integer", "required": True},
+    {"name": "Name", "displayName": "Name", "type": "text", "required": True},
+    {"name": "Material", "displayName": "Material", "type": "text", "required": True},
+    {"name": "Price", "displayName": "Price", "type": "decimal", "required": True,
+     "constraints": [{"name": "scaleDecimal", "value": 2}]},
+    {"name": "Quantity", "displayName": "Quantity", "type": "integer", "required": True},
+    {"name": "ProductURL", "displayName": "Product URL", "type": "URL", "required": False},
+]
+
+
+def build_demo_datamodel(name: str) -> dict:
+    return {
+        "name": name,
+        "displayName": f"Product (demo {name})",
+        "description": "cimt demo data model created via the TDS API tool.",
+        "fields": DEMO_PRODUCT_FIELDS,
+    }
+
+
+def build_demo_campaign(name: str, datamodel_name: str, owner: str, *,
+                        version: int = 1, display_name: str | None = None) -> dict:
+    """RESOLUTION-workflow demo campaign (the documented example shape).
+
+    Only RESOLUTION is templated here; other task types need a tailored
+    workflow/body via --file (see knowledge/tds/known-gaps.md).
+    """
+    return {
+        "campaign": {
+            "name": name,
+            "label": f"cimt demo — {name}",
+            "description": "cimt demo campaign created via the TDS API tool.",
+            "owners": [owner],
+            "taskType": "RESOLUTION",
+            "schemaRef": {
+                "namespace": "org.talend.schema",
+                "name": datamodel_name,
+                "version": version,
+                "displayName": display_name or datamodel_name,
+            },
+            "taskResolutionDelay": {"value": 10, "unit": "DAYS"},
+            "workflow": {
+                "name": "default workflow",
+                "states": [
+                    {"name": "New", "label": "New", "allowedRoles": [], "translations": {},
+                     "transitions": [{"name": "To validate", "label": "To validate",
+                                      "targetStateName": "To validate",
+                                      "allowedRoles": ["Supervisor"]}]},
+                    {"name": "To validate", "label": "To validate", "allowedRoles": [],
+                     "translations": {},
+                     "transitions": [
+                         {"name": "Accept", "label": "Accept", "targetStateName": "Resolved",
+                          "allowedRoles": ["Validator"]},
+                         {"name": "Reject", "label": "Reject", "targetStateName": "New",
+                          "allowedRoles": ["Validator"]}]},
+                    {"name": "Resolved", "label": "Resolved", "allowedRoles": ["Validator"],
+                     "translations": {}, "transitions": []},
+                ],
+            },
+        },
+        "participants": {"Supervisor": [owner], "Validator": [owner]},
+    }
+
+
+RUN_LOG = Path(__file__).resolve().parents[1] / ".claude" / "tmp" / "tds-run.json"
+
+
+def log_created(kind: str, name: str, *, deletable: bool = True) -> None:
+    """Append a created object to the gitignored run log (for teardown / PR list)."""
+    entries = []
+    if RUN_LOG.is_file():
+        try:
+            entries = json.loads(RUN_LOG.read_text())
+        except ValueError:
+            entries = []
+    entries.append({"kind": kind, "name": name, "deletable": deletable,
+                    "ts": int(time.time())})
+    RUN_LOG.parent.mkdir(parents=True, exist_ok=True)
+    RUN_LOG.write_text(json.dumps(entries, indent=2))
+
+
+def demo_name(sep: str = "_") -> str:
+    """A unique, identifiable demo name. `sep='-'` for campaigns (name pattern
+    forbids underscores), `sep='_'` for data models."""
+    return f"cimt{sep}demo{sep}{int(time.time())}"
+
+
 # --------------------------------------------------------------------------
 # Data models (schemaservice)
 # --------------------------------------------------------------------------
@@ -112,6 +214,37 @@ def cmd_datamodel_get(client: tc.TdsClient, args) -> int:
     if rules:
         print(f"\n  attached DQ rule instances: {len(rules)} "
               "(read-only here; DQ rules are authored in the UI — see `dqrule info`)")
+    return 0
+
+
+def cmd_datamodel_create(client: tc.TdsClient, args) -> int:
+    if args.demo:
+        body = build_demo_datamodel(args.name or demo_name("_"))
+    else:
+        body = load_body(args)
+    res = client.post(SCHEMA, body)
+    if client.dry_run:
+        return 0
+    name = (res or {}).get("name", body.get("name"))
+    print(f"Created data model: {name} (v{(res or {}).get('version', 1)})")
+    log_created("datamodel", name)
+    return 0
+
+
+def cmd_datamodel_update(client: tc.TdsClient, args) -> int:
+    body = load_body(args)
+    res = client.put(f"{SCHEMA}/{args.name}", body)
+    if client.dry_run:
+        return 0
+    print(f"Updated data model: {args.name} (v{(res or {}).get('version', '?')})")
+    return 0
+
+
+def cmd_datamodel_delete(client: tc.TdsClient, args) -> int:
+    client.delete(f"{SCHEMA}/{args.name}")
+    if client.dry_run:
+        return 0
+    print(f"Deleted data model: {args.name}")
     return 0
 
 
@@ -151,6 +284,55 @@ def cmd_campaign_get(client: tc.TdsClient, args) -> int:
     if states:
         label = wf.get("name") or "workflow"
         print(f"  {label} states: " + " -> ".join(s.get("name", "") for s in states))
+    return 0
+
+
+def _resolve_owner(client: tc.TdsClient, args) -> str:
+    owner = getattr(args, "owner", None) or client.cfg.get("tds.user_email")
+    if not owner:
+        sys.exit("No campaign owner. Pass --owner EMAIL or set tds.user_email in config.")
+    return owner
+
+
+def cmd_campaign_create(client: tc.TdsClient, args) -> int:
+    if args.demo:
+        if not args.datamodel:
+            sys.exit("--demo campaign needs --datamodel NAME (an existing data model).")
+        owner = _resolve_owner(client, args)
+        model = client.get(f"{SCHEMA}/{args.datamodel}")  # for version + displayName
+        name = args.name or demo_name("-")
+        body = build_demo_campaign(name, args.datamodel, owner,
+                                   version=(model or {}).get("version", 1),
+                                   display_name=(model or {}).get("displayName"))
+    else:
+        body = load_body(args)
+        name = (body.get("campaign") or {}).get("name", "?")
+    res = client.post(f"{DS}/campaigns/owned", body)
+    if client.dry_run:
+        return 0
+    cid = (res or {}).get("id")
+    rname = (res or {}).get("name", name)
+    print(f"Created campaign: {rname}  (id {cid}, type {(res or {}).get('taskType')})")
+    log_created("campaign", rname)
+    return 0
+
+
+def cmd_campaign_update(client: tc.TdsClient, args) -> int:
+    body = load_body(args)
+    client.put(f"{DS}/campaigns/owned", body)
+    if client.dry_run:
+        return 0
+    print("Updated campaign (label/participants).")
+    return 0
+
+
+def cmd_campaign_delete(client: tc.TdsClient, args) -> int:
+    # Live-verified: deletion is by NAME under /campaigns/owned/{name}
+    # (the /campaigns/{name} and /campaigns/{id} paths return 405).
+    client.delete(f"{DS}/campaigns/owned/{args.name}")
+    if client.dry_run:
+        return 0
+    print(f"Deleted campaign: {args.name}")
     return 0
 
 
@@ -228,6 +410,11 @@ def _add_json(p: argparse.ArgumentParser) -> None:
     p.add_argument("--json", action="store_true", help="raw JSON output")
 
 
+def _add_apply(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--apply", action="store_true",
+                   help="execute the write (default: dry-run prints the request)")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="tds_ops.py", description=__doc__,
@@ -239,6 +426,15 @@ def build_parser() -> argparse.ArgumentParser:
     dma = dm.add_subparsers(dest="action", required=True)
     s = dma.add_parser("list"); s.add_argument("--name"); _add_json(s)
     s = dma.add_parser("get"); s.add_argument("name"); _add_json(s)
+    s = dma.add_parser("create")
+    s.add_argument("--name", help="model name (with --demo) or override")
+    s.add_argument("--file", help="JSON body path, or - for stdin")
+    s.add_argument("--demo", action="store_true", help="use the built-in demo product model")
+    _add_apply(s)
+    s = dma.add_parser("update")
+    s.add_argument("name"); s.add_argument("--file", help="JSON body path, or - for stdin")
+    _add_apply(s)
+    s = dma.add_parser("delete"); s.add_argument("name"); _add_apply(s)
 
     # campaign
     cm = obj.add_parser("campaign", help="campaigns (data-stewardship)")
@@ -247,6 +443,16 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--all", action="store_true", help="all campaigns, not just owned")
     s.add_argument("--name"); _add_json(s)
     s = cma.add_parser("get"); s.add_argument("name"); _add_json(s)
+    s = cma.add_parser("create")
+    s.add_argument("--name", help="campaign name (lowercase/digits/hyphen)")
+    s.add_argument("--file", help="JSON body path, or - for stdin")
+    s.add_argument("--demo", action="store_true", help="RESOLUTION demo campaign template")
+    s.add_argument("--datamodel", help="existing data model name (required with --demo)")
+    s.add_argument("--owner", help="owner username (default: tds.user_email)")
+    _add_apply(s)
+    s = cma.add_parser("update"); s.add_argument("--file", help="JSON body path, or - for stdin")
+    _add_apply(s)
+    s = cma.add_parser("delete"); s.add_argument("name"); _add_apply(s)
 
     # semantic
     sm = obj.add_parser("semantic", help="semantic types (semanticservice)")
@@ -266,8 +472,14 @@ def build_parser() -> argparse.ArgumentParser:
 DISPATCH = {
     ("datamodel", "list"): cmd_datamodel_list,
     ("datamodel", "get"): cmd_datamodel_get,
+    ("datamodel", "create"): cmd_datamodel_create,
+    ("datamodel", "update"): cmd_datamodel_update,
+    ("datamodel", "delete"): cmd_datamodel_delete,
     ("campaign", "list"): cmd_campaign_list,
     ("campaign", "get"): cmd_campaign_get,
+    ("campaign", "create"): cmd_campaign_create,
+    ("campaign", "update"): cmd_campaign_update,
+    ("campaign", "delete"): cmd_campaign_delete,
     ("semantic", "list"): cmd_semantic_list,
     ("semantic", "get"): cmd_semantic_get,
     ("task", "info"): cmd_task_info,
@@ -280,11 +492,16 @@ def main(argv: list[str] | None = None) -> int:
     handler = DISPATCH.get((args.object, args.action))
     if handler is None:
         sys.exit(f"Unknown command: {args.object} {args.action}")
-    client = tc.TdsClient()
+    # Write verbs carry --apply; absent or false → dry-run. Reads have no --apply.
+    dry_run = hasattr(args, "apply") and not args.apply
+    client = tc.TdsClient(dry_run=dry_run)
     try:
-        return handler(client, args)
+        rc = handler(client, args)
     except tc.TdsError as e:
         sys.exit(str(e))
+    if dry_run:
+        print("\n(dry-run — nothing was sent. Re-run with --apply to execute.)")
+    return rc
 
 
 if __name__ == "__main__":

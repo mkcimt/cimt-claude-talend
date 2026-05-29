@@ -18,8 +18,8 @@
 
 | Object | Create | Read | Update | Delete | Notes |
 |---|---|---|---|---|---|
-| **Data model** (`schemaservice`) | ✅ POST `/schemaservice/api/v1/schemas/org.talend.schema` | ✅ GET `…/{name}` and collection GET | ✅ PUT `…/{name}` | ✅ **DELETE `…/{name}`** (Allow header confirms — docs said UI-only) | name allows `_`/mixed case; dup name → 400 `SCHEMA_NAME_ALREADY_EXISTS` |
-| **Campaign** (`data-stewardship`) | ✅ POST `/data-stewardship/api/v1/campaigns/owned` | ✅ GET `…/campaigns/owned`, `…/campaigns`, `…/campaigns/{name}` | ✅ PUT `…/campaigns/owned` (label + participants only) | ⚠️ to verify on a throwaway (OPTIONS uninformative here) | **name pattern `^[a-z][a-z\d\-]*$`** (lowercase/digits/hyphen, NO underscore); needs a pre-existing data model via `schemaRef` |
+| **Data model** (`schemaservice`) | ✅ POST `/schemaservice/api/v1/schemas/org.talend.schema` | ✅ GET `…/{name}` and collection GET | ✅ PUT `…/{name}` | ✅ **DELETE `…/{name}`** — but 400 `SCHEMA_NOT_DELETABLE_REFERENCED` while a campaign references it → delete referencing campaigns first | name allows `_`/mixed case; dup name → 400 `SCHEMA_NAME_ALREADY_EXISTS` |
+| **Campaign** (`data-stewardship`) | ✅ POST `/data-stewardship/api/v1/campaigns/owned` | ✅ GET `…/campaigns/owned`, `…/campaigns`, `…/campaigns/{name}` | ✅ PUT `…/campaigns/owned` (label + participants only) | ✅ **DELETE `…/campaigns/owned/{name}`** (by NAME; `/campaigns/{name}` and `/campaigns/{id}` → 405) — live-verified | **name pattern `^[a-z][a-z\d\-]*$`** (lowercase/digits/hyphen, NO underscore); needs a pre-existing data model via `schemaRef` |
 | **Semantic type** (`semanticservice`) | ✅ POST `/semanticservice/categories/sandbox` | ✅ GET `/semanticservice/categories` | ✅ PATCH `/categories/{id}`, draft `PATCH /v2/categories/{id}/draft` (async → poll `/draft/status`), publish `POST /categories/{id}/publish` | ✅ **DELETE `/categories/{id}`** (Allow header confirms) | sandbox→draft→publish lifecycle; types DICT/REGEX/COMPOUND |
 | **Tasks** | ❌ no REST endpoint | ❌ `/…/api/v1/tasks` → **404** | ❌ | ❌ | **Not exposed via TDS REST API.** No `api-*-task*` doc page exists. Tasks are children of campaigns, created/queried/updated via **Studio components** (`tDataStewardshipTaskInput/Output/Delete`) using **TQL**, or the UI. See "Tasks" below. |
 | **DQ rules** | ❌ | ❌ `/…/rules`, `/dq-rules`, `/dataquality/rules` → **404** | ❌ | ❌ | **No REST endpoint** under any probed path. UI-only (basic/advanced rule editor). |
@@ -35,6 +35,17 @@ The user asked for "tasks erstellen, ändern". The TDS **REST API does not expos
 ## DQ rules — the honest picture
 
 No REST endpoint found. DQ rules are authored in the UI and associated to a data model there. The tool documents this as UI-only; it will not ship a fake `dqrule create`.
+
+## Clean teardown (live-verified)
+
+Repeatable demos are fully tear-down-able via REST, despite the docs implying
+delete is UI-only. Order matters because of the reference constraint:
+
+1. `campaign delete <name> --apply`  → DELETE `/campaigns/owned/{name}`
+2. `datamodel delete <name> --apply` → now unreferenced, succeeds
+
+A full create→delete cycle (data model + RESOLUTION campaign) was run live and
+both objects returned 404 afterwards — zero residue.
 
 ## Consequences for the tool
 

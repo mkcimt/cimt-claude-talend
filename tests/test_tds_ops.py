@@ -58,6 +58,49 @@ class TestParser(unittest.TestCase):
         self.assertEqual((a.object, a.action), ("task", "info"))
 
 
+class TestWriteParsing(unittest.TestCase):
+    def setUp(self):
+        self.p = ops.build_parser()
+
+    def test_datamodel_create_demo(self):
+        a = self.p.parse_args(["datamodel", "create", "--demo", "--name", "x", "--apply"])
+        self.assertTrue(a.demo and a.apply and a.name == "x")
+
+    def test_create_defaults_to_dry_run(self):
+        a = self.p.parse_args(["datamodel", "create", "--demo"])
+        self.assertFalse(a.apply)
+
+    def test_campaign_delete(self):
+        a = self.p.parse_args(["campaign", "delete", "cimt-demo-1", "--apply"])
+        self.assertEqual((a.object, a.action, a.name), ("campaign", "delete", "cimt-demo-1"))
+
+
+class TestDemoBuilders(unittest.TestCase):
+    def test_demo_datamodel_shape(self):
+        m = ops.build_demo_datamodel("cimt_demo_1")
+        self.assertEqual(m["name"], "cimt_demo_1")
+        self.assertTrue(all("name" in f and "type" in f for f in m["fields"]))
+
+    def test_demo_campaign_shape(self):
+        c = ops.build_demo_campaign("cimt-demo-1", "cimt_demo_1", "u@x.io", version=2,
+                                    display_name="D")
+        camp = c["campaign"]
+        self.assertEqual(camp["name"], "cimt-demo-1")
+        self.assertEqual(camp["taskType"], "RESOLUTION")
+        self.assertEqual(camp["owners"], ["u@x.io"])
+        self.assertEqual(camp["schemaRef"], {"namespace": "org.talend.schema",
+                                             "name": "cimt_demo_1", "version": 2,
+                                             "displayName": "D"})
+        self.assertEqual(c["participants"]["Supervisor"], ["u@x.io"])
+        self.assertEqual([s["name"] for s in camp["workflow"]["states"]],
+                         ["New", "To validate", "Resolved"])
+
+    def test_demo_name_separators(self):
+        self.assertIn("_", ops.demo_name("_"))
+        self.assertIn("-", ops.demo_name("-"))
+        self.assertNotIn("_", ops.demo_name("-"))
+
+
 class TestDispatchTable(unittest.TestCase):
     def test_all_dispatch_keys_have_handlers(self):
         for key, fn in ops.DISPATCH.items():
