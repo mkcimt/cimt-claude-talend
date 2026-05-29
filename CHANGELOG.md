@@ -15,6 +15,7 @@ All notable changes to **cimt-claude-talend** are documented here. The format fo
 ### Changed
 
 - **`templates/CLAUDE.md.template` — editing protocol section rewritten.** Was: a one-paragraph rule about touching `.properties`. Now: five numbered hard rules covering line endings, id uniqueness, entity preservation, and post-edit verification, plus pointers to the three new mechanics docs. Adopters refresh the integration block by re-running `setup/install.py` (or `setup/update.py`).
+- **`setup/update.py` now also pulls the companion `claude-qlik-docs` repo.** Previously it only updated this kit, leaving the Qlik official-docs skill stale after new doc sections were pushed. It now locates the docs checkout (via `CLAUDE_QLIK_DOCS` or the same common-folder search as `bootstrap.py`/`doctor.py`), runs `git pull --ff-only`, and reports what changed. The step is non-fatal — a missing or non-fast-forward docs checkout warns but never fails the kit update — and runs in both modes even when the kit itself is already up to date.
 
 ### Fixed
 
