@@ -3,3 +3,5 @@
 __pycache__/
 *.bak
 .claude/tmp/
+.claude/talend.local.properties
+*.local.properties
