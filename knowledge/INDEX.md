@@ -30,6 +30,7 @@ TMC API surface and gotchas. Pure mechanic — applies to any project using TMC.
 
 - [`task-management.md`](tmc/task-management.md) — Full Public API reference (Orchestration + Processing). Build / publish / bind / promote / deploy flows.
 - [`microservice-lifecycle.md`](tmc/microservice-lifecycle.md) — Lifecycle quick-ref for ESB data-service microservices.
+- [`microservice-log-collection.md`](tmc/microservice-log-collection.md) — The Log-Server collector-pool saturation trap: default `ms.worker.thread.number` too small → blocking log4j2 `SocketAppender` freezes a microservice's whole request pool. Diagnosis via SIGQUIT, fix via the collector cfg + DSR restart (no re-deploy).
 - [`deployment-modes.md`](tmc/deployment-modes.md) — Microservice on Remote Engine vs. OSGi bundle on Talend Runtime. The one project-level choice not derivable from artifacts — ask-once-and-persist.
 - [`known-bugs.md`](tmc/known-bugs.md) — Empirically verified TMC bugs and the workarounds we apply.
 
