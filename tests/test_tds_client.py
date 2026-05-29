@@ -60,10 +60,13 @@ class TestDryRun(unittest.TestCase):
                               dry_run=True)
 
     def test_mutating_returns_sentinel_without_network(self):
+        import contextlib
+        import io
         # urlopen would raise if called; dry-run must not call it.
         with mock.patch("urllib.request.urlopen",
                         side_effect=AssertionError("network called in dry-run")):
-            out = self.c.request("POST", "/p", body={"a": 1})
+            with contextlib.redirect_stdout(io.StringIO()):  # swallow the dry-run print
+                out = self.c.request("POST", "/p", body={"a": 1})
         self.assertTrue(out["_dry_run"])
         self.assertEqual(out["method"], "POST")
         self.assertEqual(out["body"], {"a": 1})
