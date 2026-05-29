@@ -152,7 +152,7 @@ If a finding is true for *any* Talend project → Layer 2 (here). If it's only t
 
 ## Updating
 
-Just tell Claude: *"update cimt-claude-talend"*. Claude pulls the latest and tells you whether a session restart is needed (knowledge files load automatically; skill/agent changes need a restart).
+Just tell Claude: *"update cimt-claude-talend"*. Claude pulls the latest — both this kit **and** the companion [`claude-qlik-docs`](https://github.com/mkcimt/claude-qlik-docs) repo — and tells you whether a session restart is needed (knowledge files, including the Qlik docs, load automatically; skill/agent changes need a restart).
 
 <details>
 <summary>CLI alternative</summary>
