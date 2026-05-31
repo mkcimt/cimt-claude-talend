@@ -59,5 +59,12 @@ Tasks are the records inside a campaign. The standalone `/api/v1/tasks` is **404
 - **Not via REST:** state transitions, assignment change after creation, bulk delete (delete the campaign, or Studio `tDataStewardshipTaskDelete`/TQL). `assignmentStats` is eventually-consistent.
 - Tool: `tds_ops.py task list|get|create` (create defaults `assignee` to `tds.user_email`).
 
-## DQ rules — UI-only authoring; language = DSEL
-No authoring REST endpoint (UI basic/advanced editor); readable via a data model's `rulesInstances`. Advanced-mode language = **Data Shaping Expression Language (DSEL)**, used to validate: e.g. `NetWeight <= GrossWeight`, `isOfType(CountryOfOrigin, "COUNTRY_CODE_ISO2")`. TDS functions: `isInMonth/isInYear/isOfType/isOnDayOfMonth/isOnDayOfWeek`; regex = RE2/J (no backreferences). Full DSEL reference: the `data-shaping-language-reference-guide` in the qlik-talend skill. Citations: `…/tds-dqr-explang`, `…/operators`, `…/creating-data-quality-rule`.
+## DQ rules — `rulerepository` (undocumented; found via the SPA)
+- **List/Get** `GET /rulerepository/api/v1/rules`, `GET /rules/{id}` (full def: `inputMode`, `advancedExpression`, server-derived `variables`, `ruleMetadata`), `POST /rules/details` `[ids]`, `GET /datatypes`.
+- **Create** `POST /rules` body `{name, type:"VALIDATION", description, inputMode:"ADVANCED"|"BASIC", advancedExpression, basicConditionExpressions, basicActionExpressions}`. Server derives variables; **do not** send `variables`/`id`/`semanticTypesVersion` (→ 400).
+- **Edit** `PUT /rules/{id}` — same flat DTO **+ `lastModification`** (optimistic lock; missing → `E1013`).
+- **Delete** `DELETE /rules/{id}` or bulk `POST /rules/remove`.
+- **Export** `POST /rules/export` `[ids]` → canonical rule JSON (= import format). **Import** = multipart upload `POST /rules/import` → `{importId}` → confirm `POST /rules/import/{importId}?overrideDuplicates=` (JSON body → 415).
+- **Apply to a data model** = schemaservice PUT with a `rulesInstances` entry `{ruleId, ruleName, ruleVersion (=lastModification epoch-ms), variablesMapping:[{varName, value:<column>, type:"COLUMN"}]}`. Tasks then carry per-rule quality `VALID/INVALID/NOT_APPLICABLE`.
+- Language = **Data Shaping Expression Language (DSEL)**, e.g. `if ((MaterialType == 'FERT')) { GrossWeight > 0 }`. TDS functions `isInMonth/isInYear/isOfType/isOnDayOfMonth/isOnDayOfWeek`; regex = RE2/J. Reference: `data-shaping-language-reference-guide` in the skill; citations `…/tds-dqr-explang`, `…/operators`.
+- Tool: `tds_ops.py dqrule list|get|create|edit|delete|export|apply`.

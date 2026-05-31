@@ -166,6 +166,56 @@ class TestTaskAssigneeResolution(unittest.TestCase):
         self.assertIsNone(ops._task_assignee(self._client("me@x.io"), a))
 
 
+class TestDqruleParsing(unittest.TestCase):
+    def setUp(self):
+        self.p = ops.build_parser()
+
+    def test_create(self):
+        a = self.p.parse_args(["dqrule", "create", "--name", "r1",
+                               "--expression", "if (a) { b }", "--apply"])
+        self.assertEqual(a.name, "r1")
+        self.assertEqual(a.expression, "if (a) { b }")
+        self.assertTrue(a.apply)
+
+    def test_edit(self):
+        a = self.p.parse_args(["dqrule", "edit", "r1", "--description", "d"])
+        self.assertEqual((a.object, a.action, a.key), ("dqrule", "edit", "r1"))
+
+    def test_export_multi(self):
+        a = self.p.parse_args(["dqrule", "export", "r1", "r2", "--out", "x.json"])
+        self.assertEqual(a.keys, ["r1", "r2"])
+        self.assertEqual(a.out, "x.json")
+
+    def test_apply_map_repeatable(self):
+        a = self.p.parse_args(["dqrule", "apply", "r1", "model",
+                               "--map", "v1=c1", "--map", "v2=c2", "--apply"])
+        self.assertEqual(a.map, ["v1=c1", "v2=c2"])
+        self.assertEqual(a.model, "model")
+
+
+class TestRuleDtoAndEpoch(unittest.TestCase):
+    def test_build_rule_dto_from_flags(self):
+        class A:
+            file = None; name = "r"; expression = "if (a) { b }"; description = "d"
+        dto = ops._build_rule_dto(A())
+        self.assertEqual(dto["inputMode"], "ADVANCED")
+        self.assertEqual(dto["advancedExpression"], "if (a) { b }")
+        self.assertEqual(dto["type"], "VALIDATION")
+        self.assertNotIn("variables", dto)         # server derives these
+        self.assertNotIn("id", dto)
+
+    def test_build_rule_dto_requires_name_and_expr(self):
+        class A:
+            file = None; name = "r"; expression = None; description = None
+        with self.assertRaises(SystemExit):
+            ops._build_rule_dto(A())
+
+    def test_epoch_ms(self):
+        self.assertEqual(ops._epoch_ms("1970-01-01T00:00:01.000Z"), 1000)
+        self.assertIsNone(ops._epoch_ms(None))
+        self.assertIsNone(ops._epoch_ms("not-a-date"))
+
+
 class TestDispatchTable(unittest.TestCase):
     def test_all_dispatch_keys_have_handlers(self):
         for key, fn in ops.DISPATCH.items():
@@ -174,6 +224,10 @@ class TestDispatchTable(unittest.TestCase):
     def test_task_verbs_present(self):
         for v in ("list", "get", "create", "info"):
             self.assertIn(("task", v), ops.DISPATCH)
+
+    def test_dqrule_verbs_present(self):
+        for v in ("list", "get", "create", "edit", "delete", "export", "apply", "info"):
+            self.assertIn(("dqrule", v), ops.DISPATCH)
 
 
 if __name__ == "__main__":

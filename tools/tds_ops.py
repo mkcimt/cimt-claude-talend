@@ -15,7 +15,10 @@ Usage:
     tds_ops.py semantic  get <name-or-id> [--json]
     tds_ops.py task      list <campaign> [--state S] [--invalid] [--json]
     tds_ops.py task      create <campaign> --file recs.json [--assignee E] [--apply]
-    tds_ops.py dqrule    info        # DQ rules: UI-only authoring (language = DSEL)
+    tds_ops.py dqrule    list | get <id|name> | export <id|name…> [--out f]
+    tds_ops.py dqrule    create --name N --expression "if (a) { b }" [--apply]
+    tds_ops.py dqrule    edit <id|name> [--expression E] [--apply] | delete <id|name> [--apply]
+    tds_ops.py dqrule    apply <id|name> <model> --map VAR=COLUMN [--apply]
 
 Write verbs (datamodel/campaign/semantic/task create|update|delete) default to
 --dry-run and require --apply to execute. Tasks created via `task create` are
@@ -39,6 +42,7 @@ import tds_client as tc  # noqa: E402
 DS = "/data-stewardship/api/v1"
 SCHEMA = "/schemaservice/api/v1/schemas/org.talend.schema"
 SEM = "/semanticservice"
+RR = "/rulerepository/api/v1"  # data quality rules (undocumented; via the SPA)
 
 
 # --------------------------------------------------------------------------
@@ -194,6 +198,17 @@ def demo_name(sep: str = "_") -> str:
     """A unique, identifiable demo name. `sep='-'` for campaigns (name pattern
     forbids underscores), `sep='_'` for data models."""
     return f"cimt{sep}demo{sep}{int(time.time())}"
+
+
+def _epoch_ms(iso: str | None):
+    """ISO-8601 (e.g. '2026-05-31T18:59:26.412Z') -> epoch milliseconds, or None."""
+    if not iso:
+        return None
+    from datetime import datetime
+    try:
+        return int(datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp() * 1000)
+    except ValueError:
+        return None
 
 
 # --------------------------------------------------------------------------
@@ -545,16 +560,155 @@ def cmd_task_info(client: tc.TdsClient, args) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------
+# Data quality rules — /rulerepository/api/v1 (undocumented; found via the SPA)
+# --------------------------------------------------------------------------
+def _resolve_rule(client: tc.TdsClient, key: str) -> dict:
+    """Find a rule list-item by id or name."""
+    for r in tc.as_list(client.get(f"{RR}/rules")):
+        if r.get("id") == key or r.get("name") == key:
+            return r
+    sys.exit(f"No DQ rule with id or name {key!r}.")
+
+
+def cmd_dqrule_list(client: tc.TdsClient, args) -> int:
+    items = filter_by_name(tc.as_list(client.get(f"{RR}/rules")), args.name,
+                           extra_keys=("description",))
+    if args.json:
+        return emit_json(items)
+    rows = [[r.get("name", ""), r.get("type", ""), "yes" if r.get("isViable") else "no",
+             (r.get("description") or "")[:42]]
+            for r in sorted(items, key=lambda r: str(r.get("name", "")))]
+    print_table(rows, ["NAME", "TYPE", "VIABLE", "DESCRIPTION"])
+    print(f"\n{len(rows)} DQ rule(s).")
+    return 0
+
+
+def cmd_dqrule_get(client: tc.TdsClient, args) -> int:
+    full = client.get(f"{RR}/rules/{_resolve_rule(client, args.key)['id']}")
+    if args.json:
+        return emit_json(full)
+    md = full.get("ruleMetadata") or {}
+    print(f"DQ rule: {md.get('name')}  (id {md.get('id')})")
+    print(f"  type        : {md.get('type')}    inputMode: {full.get('inputMode')}")
+    print(f"  description : {md.get('description')}")
+    if full.get("advancedExpression"):
+        print(f"  expression  : {full.get('advancedExpression')}")
+    vs = full.get("variables") or []
+    if vs:
+        print("  variables   : " + ", ".join(f"{v.get('name')}({v.get('scope')})" for v in vs))
+    return 0
+
+
+def _build_rule_dto(args) -> dict:
+    if getattr(args, "file", None):
+        return load_body(args)
+    if not (args.name and args.expression):
+        sys.exit("dqrule create needs --file, or both --name and --expression.")
+    return {"name": args.name, "type": "VALIDATION", "description": args.description or "",
+            "inputMode": "ADVANCED", "advancedExpression": args.expression,
+            "basicConditionExpressions": None, "basicActionExpressions": None}
+
+
+def cmd_dqrule_create(client: tc.TdsClient, args) -> int:
+    dto = _build_rule_dto(args)
+    if client.dry_run:
+        print(f"[dry-run] POST {RR}/rules")
+        print(json.dumps(dto, indent=2, ensure_ascii=False))
+        return 0
+    res = client.post(f"{RR}/rules", dto)
+    print(f"Created DQ rule: {(res or {}).get('name')} (id {(res or {}).get('id')})")
+    log_created("dqrule", (res or {}).get("id", ""))
+    return 0
+
+
+def cmd_dqrule_edit(client: tc.TdsClient, args) -> int:
+    rule = _resolve_rule(client, args.key)
+    full = client.get(f"{RR}/rules/{rule['id']}")
+    md = full.get("ruleMetadata") or {}
+    # PUT needs the flat DTO + lastModification (optimistic lock); no id/variables.
+    dto = {"name": md.get("name"), "type": md.get("type"),
+           "description": md.get("description") or "", "inputMode": full.get("inputMode"),
+           "advancedExpression": full.get("advancedExpression"),
+           "basicConditionExpressions": full.get("basicConditionExpressions"),
+           "basicActionExpressions": full.get("basicActionExpressions"),
+           "lastModification": md.get("lastModification")}
+    if getattr(args, "file", None):
+        dto.update(load_body(args))
+        dto.setdefault("lastModification", md.get("lastModification"))
+    if args.expression is not None:
+        dto["advancedExpression"] = args.expression
+    if args.description is not None:
+        dto["description"] = args.description
+    if args.rename is not None:
+        dto["name"] = args.rename
+    if client.dry_run:
+        print(f"[dry-run] PUT {RR}/rules/{rule['id']}")
+        print(json.dumps(dto, indent=2, ensure_ascii=False))
+        return 0
+    client.put(f"{RR}/rules/{rule['id']}", dto)
+    print(f"Edited DQ rule: {dto['name']} (id {rule['id']})")
+    return 0
+
+
+def cmd_dqrule_delete(client: tc.TdsClient, args) -> int:
+    rule = _resolve_rule(client, args.key)
+    client.delete(f"{RR}/rules/{rule['id']}")
+    if client.dry_run:
+        return 0
+    print(f"Deleted DQ rule: {rule.get('name')} (id {rule['id']})")
+    return 0
+
+
+def cmd_dqrule_export(client: tc.TdsClient, args) -> int:
+    ids = [_resolve_rule(client, k)["id"] for k in args.keys]
+    data = client.post(f"{RR}/rules/export", ids)
+    if args.out:
+        Path(args.out).write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+        print(f"Exported {len(tc.as_list(data))} rule(s) to {args.out}")
+        return 0
+    return emit_json(data)
+
+
+def cmd_dqrule_apply(client: tc.TdsClient, args) -> int:
+    """Attach a rule to a data model (schemaservice PUT, rulesInstances)."""
+    rule = _resolve_rule(client, args.key)
+    full = client.get(f"{RR}/rules/{rule['id']}")
+    md = full.get("ruleMetadata") or {}
+    mapping = []
+    for pair in args.map:
+        var, sep, col = pair.partition("=")
+        if not sep:
+            sys.exit(f"--map expects varName=column, got {pair!r}")
+        mapping.append({"varName": var.strip(), "value": col.strip(), "type": "COLUMN"})
+    model = client.get(f"{SCHEMA}/{args.model}")
+    instance = {"ruleName": md.get("name"), "ruleId": md.get("id"),
+                "ruleVersion": _epoch_ms(md.get("lastModification")),
+                "variablesMapping": mapping, "compliant": True}
+    instances = [i for i in (model.get("rulesInstances") or []) if i.get("ruleId") != md.get("id")]
+    instances.append(instance)
+    model["rulesInstances"] = instances
+    if client.dry_run:
+        print(f"[dry-run] PUT {SCHEMA}/{args.model}  + rule instance:")
+        print(json.dumps(instance, indent=2, ensure_ascii=False))
+        return 0
+    client.put(f"{SCHEMA}/{args.model}", model)
+    print(f"Applied rule '{md.get('name')}' to data model {args.model} "
+          f"({len(mapping)} variable mapping(s)).")
+    return 0
+
+
 def cmd_dqrule_info(client: tc.TdsClient, args) -> int:
     print(
-        "Data Quality rules have NO TDS REST endpoint (probed /rules, /dq-rules,\n"
-        "/dataquality/rules → HTTP 404). They are authored in the Data Stewardship UI\n"
-        "(basic / advanced editor) and associated to a data model there. They ARE readable\n"
-        "as part of a data model: `tds_ops.py datamodel get <name>` shows the `rulesInstances`.\n\n"
-        "Rule language (advanced mode) = the Data Shaping Expression Language (DSEL), used to\n"
-        "VALIDATE (not transform), plus TDS functions isInMonth/isInYear/isOfType/isOnDayOfMonth/\n"
-        "isOnDayOfWeek; regex is RE2/J (no backreferences). The qlik-talend skill now carries the\n"
-        "DSEL reference. See knowledge/tds/known-gaps.md."
+        "Data Quality rules ARE manageable via REST at /rulerepository/api/v1 (undocumented;\n"
+        "found via the Data Stewardship SPA). Verbs: dqrule list/get/create/edit/delete/export/apply.\n"
+        "  - create POST /rulerepository/api/v1/rules  body {name,type,inputMode,advancedExpression,\n"
+        "    basicConditionExpressions,basicActionExpressions} — the server derives the variables.\n"
+        "  - edit PUT /rules/{id} needs the flat DTO + `lastModification` (optimistic lock).\n"
+        "  - export POST /rules/export [ids]; import is a multipart upload (the UI button).\n"
+        "  - apply: attach to a data model via the schemaservice PUT (rulesInstances + variablesMapping).\n\n"
+        "Advanced-mode language = Data Shaping Expression Language (DSEL); the qlik-talend skill\n"
+        "carries the reference. See knowledge/tds/known-gaps.md."
     )
     return 0
 
@@ -642,9 +796,30 @@ def build_parser() -> argparse.ArgumentParser:
     _add_apply(s)
     tka.add_parser("info")
 
-    # dqrule — UI-only authoring (info); see DSEL in the qlik-talend skill
-    dq = obj.add_parser("dqrule", help="DQ rules (UI-only authoring — see info)")
-    dq.add_subparsers(dest="action", required=True).add_parser("info")
+    # dqrule — data quality rules (/rulerepository/api/v1)
+    dq = obj.add_parser("dqrule", help="data quality rules (rulerepository)")
+    dqa = dq.add_subparsers(dest="action", required=True)
+    s = dqa.add_parser("list"); s.add_argument("--name"); _add_json(s)
+    s = dqa.add_parser("get"); s.add_argument("key", help="rule id or name"); _add_json(s)
+    s = dqa.add_parser("create")
+    s.add_argument("--name"); s.add_argument("--expression", help="DSEL, e.g. \"if (a) { b }\"")
+    s.add_argument("--description"); s.add_argument("--file", help="full RuleInputDTO JSON, or -")
+    _add_apply(s)
+    s = dqa.add_parser("edit")
+    s.add_argument("key", help="rule id or name")
+    s.add_argument("--expression"); s.add_argument("--description"); s.add_argument("--rename")
+    s.add_argument("--file", help="full RuleInputDTO JSON, or -")
+    _add_apply(s)
+    s = dqa.add_parser("delete"); s.add_argument("key", help="rule id or name"); _add_apply(s)
+    s = dqa.add_parser("export")
+    s.add_argument("keys", nargs="+", help="one or more rule ids or names")
+    s.add_argument("--out", help="write the export JSON to this file")
+    s = dqa.add_parser("apply", help="attach a rule to a data model")
+    s.add_argument("key", help="rule id or name"); s.add_argument("model", help="data model name")
+    s.add_argument("--map", action="append", default=[], metavar="VAR=COLUMN",
+                   help="map a rule variable to a model column (repeatable)")
+    _add_apply(s)
+    dqa.add_parser("info")
 
     return p
 
@@ -669,6 +844,13 @@ DISPATCH = {
     ("task", "get"): cmd_task_get,
     ("task", "create"): cmd_task_create,
     ("task", "info"): cmd_task_info,
+    ("dqrule", "list"): cmd_dqrule_list,
+    ("dqrule", "get"): cmd_dqrule_get,
+    ("dqrule", "create"): cmd_dqrule_create,
+    ("dqrule", "edit"): cmd_dqrule_edit,
+    ("dqrule", "delete"): cmd_dqrule_delete,
+    ("dqrule", "export"): cmd_dqrule_export,
+    ("dqrule", "apply"): cmd_dqrule_apply,
     ("dqrule", "info"): cmd_dqrule_info,
 }
 

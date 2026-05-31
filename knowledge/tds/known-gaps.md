@@ -23,7 +23,7 @@
 | **Campaign** (`data-stewardship`) | ✅ POST `/data-stewardship/api/v1/campaigns/owned` | ✅ GET `…/campaigns/owned`, `…/campaigns`, `…/campaigns/{name}` | ✅ PUT `…/campaigns/owned` (label + participants only) | ✅ **DELETE `…/campaigns/owned/{name}`** (by NAME; `/campaigns/{name}` and `/campaigns/{id}` → 405) — live-verified | **name pattern `^[a-z][a-z\d\-]*$`** (lowercase/digits/hyphen, NO underscore); needs a pre-existing data model via `schemaRef` |
 | **Semantic type** (`semanticservice`) | ✅ POST `/semanticservice/categories/sandbox` | ✅ GET `/semanticservice/categories` | ✅ PATCH `/categories/{id}`, draft `PATCH /v2/categories/{id}/draft` (async → poll `/draft/status`), publish `POST /categories/{id}/publish` | ✅ **DELETE `/categories/{id}`** (Allow header confirms) | sandbox→draft→publish lifecycle; types DICT/REGEX/COMPOUND |
 | **Tasks** | ✅ **POST `/data-stewardship/api/v1/campaigns/owned/{name}/tasks`** (array of `{type, assignee?, record}`) | ✅ **GET `…/campaigns/owned/{name}/tasks`** (paginates ~200/page) | ⚠️ state transitions / assignment-change not via REST (UI / Studio) | ⚠️ bulk delete not via REST (delete the whole campaign, or Studio `tDataStewardshipTaskDelete`) | **Campaign-scoped** — the standalone `/api/v1/tasks` is 404. `assignee` in the create payload works (sets the steward). See "Tasks" below. |
-| **DQ rules** | ❌ | ❌ `/…/rules`, `/dq-rules`, `/dataquality/rules` → **404** (readable only via a data model's `rulesInstances`) | ❌ | ❌ | **No authoring REST endpoint** — UI-only (basic/advanced editor). Advanced-mode language = **DSEL** (now in the qlik-talend skill). See "DQ rules" below. |
+| **DQ rules** (`rulerepository`) | ✅ **POST `/rulerepository/api/v1/rules`** | ✅ GET `/rules`, `/rules/{id}`, POST `/rules/details`, POST `/rules/export` | ✅ **PUT `/rules/{id}`** (flat DTO + `lastModification`) | ✅ DELETE `/rules/{id}` / POST `/rules/remove` | Service is **undocumented** (found via the SPA bundle), not under `data-stewardship`. **Apply** to a model via the schemaservice PUT (`rulesInstances`). See "DQ rules" below. |
 
 ## Tasks — the honest picture (revised)
 
@@ -37,11 +37,20 @@ Still **not** via REST (use UI or Studio components): **state transitions**, **a
 
 The kit's `tds_ops.py` ships `task list / get / create` (create defaults `assignee` to `tds.user_email`).
 
-## DQ rules — the honest picture
+## DQ rules — the honest picture (revised — they ARE REST-manageable)
 
-No **authoring** REST endpoint (UI-only, basic/advanced editor); rules are readable via a data model's `rulesInstances`. The tool does not ship a fake `dqrule create`.
+The first conclusion ("UI-only, no REST") was wrong: it came from probing `data-stewardship` paths. The rules live in a **separate, undocumented service `rulerepository`** (discovered by reading the Data Stewardship SPA's JS bundle — the API is behind the gateway with no Swagger/doc). Full lifecycle, **live-verified**:
 
-The **advanced-mode rule language** is the **Data Shaping Expression Language (DSEL)** — used to *validate* (not transform), e.g. `NetWeight <= GrossWeight`, `isOfType(CountryOfOrigin, "COUNTRY_CODE_ISO2")`. Plus TDS supplement functions `isInMonth / isInYear / isOfType / isOnDayOfMonth / isOnDayOfWeek`; regex is **RE2/J** (no backreferences). The full DSEL reference is now crawled into the qlik-talend skill (`data-shaping-language-reference-guide`).
+- **List/Get** `GET /rulerepository/api/v1/rules`, `GET /rules/{id}` (returns expression + server-derived `variables`), `POST /rules/details` `[ids]`.
+- **Create** `POST /rules` with the flat **`RuleInputDTO`**: `{name, type:"VALIDATION", description, inputMode:"ADVANCED"|"BASIC", advancedExpression, basicConditionExpressions, basicActionExpressions}`. **The server derives the variables from the expression** — do NOT send `variables`, `id` or `semanticTypesVersion` (→ 400).
+- **Edit** `PUT /rules/{id}` with the same flat DTO **plus `lastModification`** (the current value — optimistic lock; without it → `E1013`).
+- **Delete** `DELETE /rules/{id}` (or bulk `POST /rules/remove`).
+- **Export** `POST /rules/export` `[ids]` → the canonical rule JSON (= the import format). **Import** is a *multipart file upload* (`POST /rules/import` → `{importId}` → confirm `POST /rules/import/{importId}?overrideDuplicates=`) — JSON body → 415. There is no export *button* in the UI but the endpoint exists.
+- **Apply to a data model** = schemaservice **PUT** the model with a `rulesInstances` entry `{ruleId, ruleName, ruleVersion, variablesMapping:[{varName, value:<column>, type:"COLUMN"}]}`, where `ruleVersion` = the rule's `lastModification` as **epoch-ms**. Live-verified: tasks then evaluate to `valid:true/false` with per-rule quality `VALID / INVALID / NOT_APPLICABLE` (condition not met).
+
+Rule language = the **Data Shaping Expression Language (DSEL)** — validate (not transform), e.g. `if ((MaterialType == 'FERT')) { GrossWeight > 0 }`, `isOfType(CountryOfOrigin, "COUNTRY_CODE_ISO2")`. TDS functions `isInMonth/isInYear/isOfType/isOnDayOfMonth/isOnDayOfWeek`; regex = RE2/J (no backreferences). Full reference now in the qlik-talend skill (`data-shaping-language-reference-guide`).
+
+The kit's `tds_ops.py` ships `dqrule list/get/create/edit/delete/export/apply`.
 
 ## Clean teardown (live-verified)
 
@@ -56,6 +65,6 @@ both objects returned 404 afterwards — zero residue.
 
 ## Consequences for the tool
 
-- Full, real CRUD ships for **data models, campaigns, semantic types** (incl. deletes → clean demo teardown) and **tasks** (`task list/get/create`, assigned by default).
-- **Task transitions/reassignment & DQ-rule authoring**: no REST — surfaced as clear UI/Studio messages in the CLI (`task info`, `dqrule info`), never silent no-ops.
+- Full, real CRUD ships for **data models, campaigns, semantic types, tasks, and DQ rules** (`dqrule list/get/create/edit/delete/export/apply`) — incl. clean teardown and live-verified rule evaluation on tasks.
+- Still **no REST** (UI/Studio only): task **state transitions** & **reassignment after creation**, DQ-rule **import** is multipart-only, and the "history" service. Surfaced as honest messages, never silent no-ops.
 - Campaign create requires a data model first (`schemaRef`) and a valid owner username; tasks need a `record` matching the model. Owner/assignee = the authenticated tenant user (configured locally, never committed).

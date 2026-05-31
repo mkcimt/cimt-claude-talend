@@ -52,6 +52,27 @@ field's governed value list (or missing required fields) show up as `valid=false
 — filter them with `task list … --invalid`. State transitions / bulk delete stay
 in the UI or Studio (`tDataStewardshipTask*`). See [`known-gaps.md`](known-gaps.md).
 
+## Add a data quality rule (and apply it)
+
+```bash
+# create a validation rule (DSEL; server derives the variables from the expression)
+python3 tools/tds_ops.py dqrule create --name mm_weight_check \
+        --expression "if ((MaterialType == 'FERT')) { GrossWeight > 0 }" --apply
+
+# attach it to a data model, mapping rule variables -> model columns
+python3 tools/tds_ops.py dqrule apply mm_weight_check demo_products \
+        --map MaterialType=MaterialType --map GrossWeight=GrossWeight --apply
+
+python3 tools/tds_ops.py dqrule list
+python3 tools/tds_ops.py dqrule export mm_weight_check --out rules_backup.json
+```
+
+Once applied, the campaign's tasks evaluate against the rule — each task carries
+`VALID / INVALID / NOT_APPLICABLE` per rule (filter with `task list … --invalid`).
+Edit with `dqrule edit <name> --expression "…"`, remove with `dqrule delete <name>`.
+Rule language = DSEL (see the qlik-talend skill). Import (the UI button) is a
+multipart file upload; export via the verb above gives the import-compatible JSON.
+
 ## Tear down (clean, repeatable)
 
 Order matters — a data model can't be deleted while a campaign references it:
