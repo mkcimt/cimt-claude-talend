@@ -33,12 +33,24 @@ Drop `--apply` first to preview the exact request bodies. Use `--file body.json`
 instead of `--demo` for fully custom models/campaigns (e.g. MERGING / GROUPING /
 ARBITRATION campaigns, whose workflows differ from the RESOLUTION template).
 
-## Seed tasks (records) — not via this tool
+## Seed tasks (records) — via REST
 
-Tasks are loaded into a campaign with the Studio component
-`tDataStewardshipTaskInput` (or the UI), not the REST API — see
-[`known-gaps.md`](known-gaps.md). Create the campaign here, then run a small
-Studio job to push demo records as tasks.
+Tasks are created through the campaign-scoped endpoint, so the tool can seed the
+worklist directly. Put the records in a JSON file (an array of objects whose keys
+match the data-model fields), then:
+
+```bash
+# records.json: [ {"Material":"EU-100001","Description":"…","MaterialType":"HAWA",
+#                  "BaseUnit":"EA","Plant":"DE01"}, … ]
+python3 tools/tds_ops.py task create demo-products-resolution --file records.json --apply
+python3 tools/tds_ops.py task list   demo-products-resolution --invalid
+```
+
+Created tasks are **assigned to you by default** (`tds.user_email`); use
+`--assignee EMAIL` or `--unassigned` to change that. Records with values outside a
+field's governed value list (or missing required fields) show up as `valid=false`
+— filter them with `task list … --invalid`. State transitions / bulk delete stay
+in the UI or Studio (`tDataStewardshipTask*`). See [`known-gaps.md`](known-gaps.md).
 
 ## Tear down (clean, repeatable)
 

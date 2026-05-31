@@ -13,11 +13,13 @@ Usage:
     tds_ops.py campaign  get <name> [--json]
     tds_ops.py semantic  list [--name SUBSTR] [--json]
     tds_ops.py semantic  get <name-or-id> [--json]
-    tds_ops.py task      info        # tasks have no REST API — explains the path
-    tds_ops.py dqrule    info        # DQ rules have no REST API — explains the path
+    tds_ops.py task      list <campaign> [--state S] [--invalid] [--json]
+    tds_ops.py task      create <campaign> --file recs.json [--assignee E] [--apply]
+    tds_ops.py dqrule    info        # DQ rules: UI-only authoring (language = DSEL)
 
-Write verbs (datamodel/campaign/semantic create|update|delete) are added in
-later phases; they default to --dry-run and require --apply to execute.
+Write verbs (datamodel/campaign/semantic/task create|update|delete) default to
+--dry-run and require --apply to execute. Tasks created via `task create` are
+assigned to `tds.user_email` by default (use --assignee / --unassigned).
 
 Capability matrix and gaps: see `knowledge/tds/known-gaps.md`.
 """
@@ -447,19 +449,98 @@ def cmd_semantic_delete(client: tc.TdsClient, args) -> int:
 
 
 # --------------------------------------------------------------------------
-# Tasks & DQ rules — no REST API (honest info verbs, not no-ops)
+# Tasks — campaign-scoped REST: /data-stewardship/api/v1/campaigns/owned/{name}/tasks
+# (the standalone /api/v1/tasks path is 404 — tasks are always campaign-scoped)
 # --------------------------------------------------------------------------
+TASK_BATCH = 250
+
+
+def _tasks_path(campaign: str) -> str:
+    return f"{DS}/campaigns/owned/{campaign}/tasks"
+
+
+def _task_assignee(client: tc.TdsClient, args) -> str | None:
+    if getattr(args, "unassigned", False):
+        return None
+    return getattr(args, "assignee", None) or client.cfg.get("tds.user_email")
+
+
+def cmd_task_list(client: tc.TdsClient, args) -> int:
+    items = tc.as_list(client.get(_tasks_path(args.campaign)))
+    if args.state:
+        items = [t for t in items if str(t.get("currentState", "")).lower() == args.state.lower()]
+    if args.invalid:
+        items = [t for t in items if t.get("valid") is False]
+    if args.json:
+        return emit_json(items)
+    rows = []
+    for t in items:
+        rec = t.get("record") or {}
+        first = next(iter(rec.values()), "")
+        rows.append([str(first)[:20], t.get("currentState", ""), str(t.get("valid")),
+                     t.get("assignee") or "—"])
+    print_table(rows, ["RECORD[0]", "STATE", "VALID", "ASSIGNEE"])
+    print(f"\n{len(rows)} task(s) shown. NOTE: the endpoint paginates (default page ~200) — "
+          "filter server-side or page for full sets.")
+    return 0
+
+
+def cmd_task_get(client: tc.TdsClient, args) -> int:
+    # No standalone task GET; scan the campaign's tasks for the id.
+    for t in tc.as_list(client.get(_tasks_path(args.campaign))):
+        if t.get("id") == args.id:
+            return emit_json(t)
+    sys.exit(f"Task {args.id!r} not found on the current page of campaign {args.campaign!r} "
+             "(endpoint paginates ~200).")
+
+
+def cmd_task_create(client: tc.TdsClient, args) -> int:
+    """Create tasks from a JSON file: an array of record objects (data values),
+    or an array of full task objects ({type, record, ...}), or a single object."""
+    data = load_body(args)
+    records = data if isinstance(data, list) else [data]
+    assignee = _task_assignee(client, args)
+    tasks = []
+    for r in records:
+        if isinstance(r, dict) and "record" in r:      # already a task object
+            t = dict(r)
+            t.setdefault("type", args.type)
+            if assignee is not None:
+                t.setdefault("assignee", assignee)
+        else:                                          # a bare record
+            t = {"type": args.type, "record": r}
+            if assignee is not None:
+                t["assignee"] = assignee
+        tasks.append(t)
+
+    path = _tasks_path(args.campaign)
+    if client.dry_run:
+        print(f"[dry-run] POST {path}")
+        print(f"  {len(tasks)} task(s), type={args.type}, "
+              f"assignee={assignee or 'unassigned'}; first task:")
+        if tasks:
+            print(json.dumps(tasks[0], indent=2, ensure_ascii=False)[:600])
+        return 0
+
+    created = 0
+    for i in range(0, len(tasks), TASK_BATCH):
+        res = client.post(path, tasks[i:i + TASK_BATCH])
+        created += len(res) if isinstance(res, list) else len(tasks[i:i + TASK_BATCH])
+    print(f"Created {created} task(s) in campaign {args.campaign}"
+          + (f", assigned to {assignee}." if assignee else ", unassigned."))
+    return 0
+
+
 def cmd_task_info(client: tc.TdsClient, args) -> int:
     print(
-        "Tasks have NO Talend Data Stewardship REST endpoint.\n"
-        "  Verified: /data-stewardship/api/v1/tasks* → HTTP 404, and the user guide\n"
-        "  documents no task API page.\n\n"
-        "Tasks are the records inside a campaign and are managed via:\n"
-        "  - Studio components: tDataStewardshipTaskInput (load/create), \n"
-        "    tDataStewardshipTaskOutput, tDataStewardshipTaskDelete — filtered with TQL;\n"
-        "  - the Data Stewardship UI (manual resolution / transitions / assignment).\n\n"
-        "For demos, create the campaign with this tool, then seed tasks from a Studio\n"
-        "job (tDataStewardshipTaskInput). See knowledge/tds/known-gaps.md."
+        "Tasks ARE available via the campaign-scoped REST endpoint:\n"
+        "  GET  /data-stewardship/api/v1/campaigns/owned/{name}/tasks   (list; paginates ~200)\n"
+        "  POST /data-stewardship/api/v1/campaigns/owned/{name}/tasks   (create; array of\n"
+        '       {"type":"RESOLUTION","assignee":<user>,"record":{...}} objects)\n\n'
+        "  -> `tds_ops.py task list <campaign>` / `task create <campaign> --file records.json`\n\n"
+        "NOTE: the standalone /api/v1/tasks path is 404 — tasks are always campaign-scoped.\n"
+        "Bulk task delete and state transitions are not exposed here — use the UI or the\n"
+        "Studio components (tDataStewardshipTask*). See knowledge/tds/known-gaps.md."
     )
     return 0
 
@@ -468,10 +549,12 @@ def cmd_dqrule_info(client: tc.TdsClient, args) -> int:
     print(
         "Data Quality rules have NO TDS REST endpoint (probed /rules, /dq-rules,\n"
         "/dataquality/rules → HTTP 404). They are authored in the Data Stewardship UI\n"
-        "(basic / advanced editor) and associated to a data model there.\n\n"
-        "They ARE readable as part of a data model: `tds_ops.py datamodel get <name>`\n"
-        "shows attached rule instances (the `rulesInstances` field). Authoring stays UI-only.\n"
-        "See knowledge/tds/known-gaps.md."
+        "(basic / advanced editor) and associated to a data model there. They ARE readable\n"
+        "as part of a data model: `tds_ops.py datamodel get <name>` shows the `rulesInstances`.\n\n"
+        "Rule language (advanced mode) = the Data Shaping Expression Language (DSEL), used to\n"
+        "VALIDATE (not transform), plus TDS functions isInMonth/isInYear/isOfType/isOnDayOfMonth/\n"
+        "isOnDayOfWeek; regex is RE2/J (no backreferences). The qlik-talend skill now carries the\n"
+        "DSEL reference. See knowledge/tds/known-gaps.md."
     )
     return 0
 
@@ -540,10 +623,27 @@ def build_parser() -> argparse.ArgumentParser:
     s = sma.add_parser("publish"); s.add_argument("id"); _add_apply(s)
     s = sma.add_parser("delete"); s.add_argument("id"); _add_apply(s)
 
-    # task / dqrule — info only (no REST API)
-    tk = obj.add_parser("task", help="tasks (no REST API — see info)")
-    tk.add_subparsers(dest="action", required=True).add_parser("info")
-    dq = obj.add_parser("dqrule", help="DQ rules (no REST API — see info)")
+    # task — campaign-scoped records
+    tk = obj.add_parser("task", help="campaign tasks / records (data-stewardship)")
+    tka = tk.add_subparsers(dest="action", required=True)
+    s = tka.add_parser("list")
+    s.add_argument("campaign")
+    s.add_argument("--state", help="filter by currentState (e.g. New)")
+    s.add_argument("--invalid", action="store_true", help="only tasks failing validation")
+    _add_json(s)
+    s = tka.add_parser("get"); s.add_argument("campaign"); s.add_argument("id"); _add_json(s)
+    s = tka.add_parser("create")
+    s.add_argument("campaign")
+    s.add_argument("--file", required=True,
+                   help="JSON: array of records or task objects, or - for stdin")
+    s.add_argument("--assignee", help="assignee username (default: tds.user_email)")
+    s.add_argument("--unassigned", action="store_true", help="create without assigning")
+    s.add_argument("--type", default="RESOLUTION", help="task type (default RESOLUTION)")
+    _add_apply(s)
+    tka.add_parser("info")
+
+    # dqrule — UI-only authoring (info); see DSEL in the qlik-talend skill
+    dq = obj.add_parser("dqrule", help="DQ rules (UI-only authoring — see info)")
     dq.add_subparsers(dest="action", required=True).add_parser("info")
 
     return p
@@ -565,6 +665,9 @@ DISPATCH = {
     ("semantic", "create"): cmd_semantic_create,
     ("semantic", "publish"): cmd_semantic_publish,
     ("semantic", "delete"): cmd_semantic_delete,
+    ("task", "list"): cmd_task_list,
+    ("task", "get"): cmd_task_get,
+    ("task", "create"): cmd_task_create,
     ("task", "info"): cmd_task_info,
     ("dqrule", "info"): cmd_dqrule_info,
 }

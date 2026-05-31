@@ -120,14 +120,60 @@ class TestSemanticParsing(unittest.TestCase):
         self.assertEqual((a.object, a.action, a.id), ("semantic", "delete", "abc123"))
 
 
+class TestTaskParsing(unittest.TestCase):
+    def setUp(self):
+        self.p = ops.build_parser()
+
+    def test_task_list(self):
+        a = self.p.parse_args(["task", "list", "mm-demo", "--state", "New", "--invalid"])
+        self.assertEqual((a.object, a.action, a.campaign), ("task", "list", "mm-demo"))
+        self.assertEqual(a.state, "New")
+        self.assertTrue(a.invalid)
+
+    def test_task_create_defaults(self):
+        a = self.p.parse_args(["task", "create", "c1", "--file", "r.json"])
+        self.assertEqual(a.type, "RESOLUTION")
+        self.assertFalse(a.apply)        # dry-run by default
+        self.assertFalse(a.unassigned)
+
+    def test_task_create_assignee(self):
+        a = self.p.parse_args(["task", "create", "c1", "--file", "-",
+                               "--assignee", "u@x.io", "--apply"])
+        self.assertEqual(a.assignee, "u@x.io")
+        self.assertTrue(a.apply)
+
+
+class TestTaskAssigneeResolution(unittest.TestCase):
+    class _Args:
+        def __init__(self, **kw):
+            self.__dict__.update(kw)
+
+    def _client(self, email):
+        c = ops.tc.TdsClient(cfg={"tds.base_url": "https://x", "tds.token": "t",
+                                  "tds.user_email": email})
+        return c
+
+    def test_default_from_config(self):
+        a = self._Args(assignee=None, unassigned=False)
+        self.assertEqual(ops._task_assignee(self._client("me@x.io"), a), "me@x.io")
+
+    def test_override(self):
+        a = self._Args(assignee="other@x.io", unassigned=False)
+        self.assertEqual(ops._task_assignee(self._client("me@x.io"), a), "other@x.io")
+
+    def test_unassigned(self):
+        a = self._Args(assignee=None, unassigned=True)
+        self.assertIsNone(ops._task_assignee(self._client("me@x.io"), a))
+
+
 class TestDispatchTable(unittest.TestCase):
     def test_all_dispatch_keys_have_handlers(self):
         for key, fn in ops.DISPATCH.items():
             self.assertTrue(callable(fn), f"{key} handler not callable")
 
-    def test_info_verbs_present(self):
-        self.assertIn(("task", "info"), ops.DISPATCH)
-        self.assertIn(("dqrule", "info"), ops.DISPATCH)
+    def test_task_verbs_present(self):
+        for v in ("list", "get", "create", "info"):
+            self.assertIn(("task", v), ops.DISPATCH)
 
 
 if __name__ == "__main__":
