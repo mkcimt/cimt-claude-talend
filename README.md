@@ -74,6 +74,7 @@ skills/           Slash commands (review-talend-branch, review-talend-code,
                   document-interface). Linked into your project's .claude/commands/.
 agents/           Subagents used by the slash commands. Linked into .claude/agents/.
 tools/            Python CLIs (tmc_release.py, tmc_microservice_ops.py,
+                  tds_ops.py + tds_client.py for Data Stewardship,
                   touch_item_properties.py, cli.py for config get/set).
 templates/        Drop-in starting points for the consuming project.
                   - CLAUDE.md.template — project-overlay skeleton (drop-in fixed block).
@@ -141,7 +142,7 @@ This kit is organized around a deliberate split between what's universal and wha
 | Layer | What it is | Where it lives |
 |---|---|---|
 | **1** — Qlik official docs | Authoritative Qlik Talend documentation | [`claude-qlik-docs`](https://github.com/mkcimt/claude-qlik-docs) (separate skill, installed automatically by bootstrap) |
-| **2a** — Universal Talend mechanics | How `.item` files work, Studio quirks, TMC API behaviour, git workflow alongside Studio | This repo — `knowledge/mechanics/`, `knowledge/tmc/`, `knowledge/build-publish/`, `knowledge/code-review/`, `knowledge/documentation/` |
+| **2a** — Universal Talend mechanics | How `.item` files work, Studio quirks, TMC + TDS API behaviour, git workflow alongside Studio | This repo — `knowledge/mechanics/`, `knowledge/tmc/`, `knowledge/tds/`, `knowledge/build-publish/`, `knowledge/code-review/`, `knowledge/documentation/` |
 | **2b** — Optional patterns | Components and frameworks a project may or may not use (Job Instance Framework, `tContextLoad`, …). Variant in use is **detected from the project's artifacts** at the moment it becomes relevant. | This repo — `knowledge/patterns/` |
 | **3** — Project-specific knowledge | Conventions, business glossary, interface list, known errors | The consuming Talend project's own repo, typically `docs/` and `CLAUDE.md` |
 | **4** — Developer/laptop-specific | Local checkout paths, personal preferences, secrets | `.claude/talend.local.properties` and user memory |

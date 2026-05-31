@@ -34,6 +34,14 @@ TMC API surface and gotchas. Pure mechanic — applies to any project using TMC.
 - [`deployment-modes.md`](tmc/deployment-modes.md) — Microservice on Remote Engine vs. OSGi bundle on Talend Runtime. The one project-level choice not derivable from artifacts — ask-once-and-persist.
 - [`known-bugs.md`](tmc/known-bugs.md) — Empirically verified TMC bugs and the workarounds we apply.
 
+## `tds/` — Talend Data Stewardship (Cloud) REST API
+
+TDS REST API surface, verified live, and the CLI that drives it ([`tools/tds_ops.py`](../tools/tds_ops.py), [`tools/tds_client.py`](../tools/tds_client.py)).
+
+- [`api-reference.md`](tds/api-reference.md) — Auth, services (schemaservice / data-stewardship / semanticservice), endpoints + payloads for data models, campaigns, and the semantic-type sandbox→draft→publish lifecycle, with citation URLs.
+- [`known-gaps.md`](tds/known-gaps.md) — Docs-vs-live reconciliation: what has no REST API (tasks, DQ rules → UI / Studio components) and the live-verified delete reality (campaign delete via `/campaigns/owned/{name}`; model delete blocked while referenced), plus the clean-teardown order.
+- [`demo-workflows.md`](tds/demo-workflows.md) — Stand up and tear down a TDS demo (data model + RESOLUTION campaign + semantic type) with `tds_ops.py`; writes are dry-run by default.
+
 ## `build-publish/` — Headless Talend build & TMC publish
 
 Local Maven build and TMC Cloud Publisher mechanics.
