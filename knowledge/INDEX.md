@@ -29,6 +29,7 @@ Patterns a Talend project may or may not use. The variant in use is **detected f
 TMC API surface and gotchas. Pure mechanic — applies to any project using TMC.
 
 - [`task-management.md`](tmc/task-management.md) — Full Public API reference (Orchestration + Processing). Build / publish / bind / promote / deploy flows.
+- [`versioning.md`](tmc/versioning.md) — The three independent version axes (Studio **job version**, published **artifact version**, server-side **task version**): who bumps each, when, and how they relate. Job version is compiled into the generated Java package; artifact version is `semver.buildTimestamp` per publish; task version is a server-side revision counter dropped on `PUT`.
 - [`microservice-lifecycle.md`](tmc/microservice-lifecycle.md) — Lifecycle quick-ref for ESB data-service microservices.
 - [`microservice-log-collection.md`](tmc/microservice-log-collection.md) — The Log-Server collector-pool saturation trap: default `ms.worker.thread.number` too small → blocking log4j2 `SocketAppender` freezes a microservice's whole request pool. Diagnosis via SIGQUIT, fix via the collector cfg + DSR restart (no re-deploy).
 - [`deployment-modes.md`](tmc/deployment-modes.md) — Microservice on Remote Engine vs. OSGi bundle on Talend Runtime. The one project-level choice not derivable from artifacts — ask-once-and-persist.
