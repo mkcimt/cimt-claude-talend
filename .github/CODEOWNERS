@@ -1,0 +1,6 @@
+# Code owners for cimt-claude-talend
+# Every change requires review/approval from the owner(s) listed here.
+# The main ruleset has "Require review from Code Owners" enabled, so this
+# makes @mkcimt the required approver for all pull requests.
+
+* @mkcimt
