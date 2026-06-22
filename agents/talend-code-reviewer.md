@@ -151,7 +151,7 @@ For every `expressionFilter` Boolean guard in a tMap output table:
 
 6. **Reject-table without signal.** `<metadata connector="REJECT">` present but no downstream `tDie` / `tWarn` / writer → Warning (silent data loss).
 
-*Canonical example (Principle 1 — confirmed Blocker):* `i5xx_create_<resource>` — `changeContentExists` Var checked eight `new_*` fields but omitted `request_to_move_up`, which is a real change field in `<resource>_change_requests`. POSTs with only `request_to_move_up = true` received HTTP 400 "Please fill out at least one change request field!" — demonstrably reachable, confirmed bug raised by business.
+*Canonical example (Principle 1 — confirmed Blocker):* `i5xx_create_<resource>` — a `changeContentExists` Var checked eight `new_*` fields but omitted one further change field present in the `<resource>_change_requests` table. POSTs that set only that omitted field received an HTTP 400 "fill out at least one change request field" rejection — demonstrably reachable, confirmed bug raised by business.
 
 ## Naming asymmetry (smell — not a principle, but a fast cue)
 

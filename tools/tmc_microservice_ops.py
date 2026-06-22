@@ -9,7 +9,7 @@ Usage:
     python tmc_microservice_ops.py cycle     --env dev|tst          [--name <substr>] [--dry-run]
         # cycle = undeploy + redeploy
 
---name filters by substring match against the API name (e.g. --name i556_api_user).
+--name filters by substring match against the API name (e.g. --name i5xx_api_user).
 Without --name all i5xx APIs in the env are targeted.
 
 Destructive ops (undeploy / redeploy / cycle) are HARD-LIMITED to dev + tst.
@@ -214,7 +214,7 @@ def main() -> int:
         sp = sub.add_parser(c)
         sp.add_argument("--env", required=True, choices=list(ENV_IDS))
         sp.add_argument("--name", default=None,
-                        help="Filter by substring of API name (e.g. i556_api_user). "
+                        help="Filter by substring of API name (e.g. i5xx_api_user). "
                              "Without this flag all i5xx APIs are targeted.")
         if c != "list":
             sp.add_argument("--dry-run", action="store_true")

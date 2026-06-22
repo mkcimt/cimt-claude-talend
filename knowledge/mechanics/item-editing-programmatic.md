@@ -105,8 +105,8 @@ For batch edits across many `.item` files (script-driven), run the same verifica
 
 Every one of these invariants is a Talend Studio mechanic — true for any project using `.item` files, regardless of business domain or framework choice. Each was learned the hard way:
 
-- LF/CRLF flip: SODS 2026-05, `i540_get_part_0.1.item` and 12 siblings written via Python `Path.write_text` ended up as LF on disk while the rest of the project stayed CRLF. The mixed state interacted with another issue (joblet-inlining size) to push the generated `.java` over the formatter's heap limit.
-- Duplicate ids: same session, `i556_list_users_0.1.item` had `id="3,4,5"` appearing twice in a TRACE_COLUMN list after a naive block-clone with `value` substitution but no id bump.
+- LF/CRLF flip: in a 2026-05 session, `iXXX_get_record_0.1.item` and 12 siblings written via Python `Path.write_text` ended up as LF on disk while the rest of the project stayed CRLF. The mixed state interacted with another issue (joblet-inlining size) to push the generated `.java` over the formatter's heap limit.
+- Duplicate ids: same session, `iXXX_list_records_0.1.item` had `id="3,4,5"` appearing twice in a TRACE_COLUMN list after a naive block-clone with `value` substitution but no id bump.
 - BOM: documented in Talend forum threads as a recurring import failure mode.
 
 ## Cross-references
