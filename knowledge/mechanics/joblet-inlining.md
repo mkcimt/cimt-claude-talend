@@ -82,8 +82,8 @@ The structural alternative is a standalone **Job** invoked via `tRunJob` from th
 
 ## Verified
 
-- 2026-05: SODS `i540_api_part_master_1.1` route — 19 invocations of `mod_api_get_auth_details` joblet (21 components, incl. 2 sub-joblets) → 342 Struct classes for `mod_api_get_auth_details_*` alone, total 507 Struct classes, generated `.java` 32 MB / 982 k lines. Eclipse JDT formatter OOM at 4 GB heap → `processCode is null` NPE.
-- 2026-05: same project, `i540_list_part_number_linkage` → one Struct with 17 093 lines (~340 columns).
+- 2026-05: a REST route with 19 invocations of an auth-helper joblet (21 components, incl. 2 sub-joblets) → 342 Struct classes for that one joblet alone, total 507 Struct classes, generated `.java` 32 MB / 982 k lines. Eclipse JDT formatter OOM at 4 GB heap → `processCode is null` NPE.
+- 2026-05: same project, a joblet with a very wide schema → one Struct with 17 093 lines (~340 columns).
 
 ## Cross-references
 

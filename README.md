@@ -117,7 +117,7 @@ The slash commands `/document-interface`, `/review-talend-branch`, `/review-tale
 - **Reading and understanding a job** — *"Walk me through what job iXYZ does."* / *"What reject paths does this worker have?"* / *"Trace the call chain from the deployed job."*
 - **Investigating TMC state** — *"Which artifact version of task iXYZ is currently deployed on tst?"* / *"Why is the deploy of iABC on uat failing?"* / *"List all i5xx microservices that are not running on prd."*
 - **Build, publish, deploy** — *"Build job iXYZ and publish it to dev."* / *"Promote all i5xx APIs from tst to uat."* / *"Redeploy iABC on tst — it's stuck on the old artifact."*
-- **Editing with the right safety net** — *"Update the SQL query in `mod_order_validation` so that `request_to_move_up` is also taken into account."* (Claude edits the `.item` *and* touches the sibling `.properties` in the same commit, because that's a hard rule it knows from `CLAUDE.md`.)
+- **Editing with the right safety net** — *"Update the SQL query in `iXYZ` so that an additional change field is also taken into account."* (Claude edits the `.item` *and* touches the sibling `.properties` in the same commit, because that's a hard rule it knows from `CLAUDE.md`.)
 - **Conversational review** — *"Take a look at my latest changes on `feature/x`."* (Claude can do this without `/review-talend-branch` — it knows to filter Studio noise because the convention is in `knowledge/`.)
 
 ---

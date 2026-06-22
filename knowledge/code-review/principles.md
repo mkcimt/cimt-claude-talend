@@ -16,7 +16,7 @@ Any Boolean aggregation (`||` / `&&`) over a category of fields, and any switch-
 
 *Generic example.* A `Var` OR-chains all "change-indicator" fields from an input row. Enumerate every column of that category in the source table or input schema. A missing field means setting only that field produces wrong behaviour — a caller gets a misleading error or silent no-op.
 
-*Canonical anonymized case study.* An API joblet handling order-change-request POSTs guarded acceptance with a boolean Var `changeContentExists` that OR-ed eight `new_*` fields. The DB table had nine real change-indicator fields; one (`request_to_move_up`) was omitted from the Var. POSTs setting only that one field were rejected with "Please fill out at least one change request field" — a real, business-reported bug. Pattern: guard expression references a *subset* of a field category that actually carries semantic load. Always enumerate the full category from the schema.
+*Canonical anonymized case study.* An API joblet handling change-request POSTs guarded acceptance with a boolean Var `changeContentExists` that OR-ed eight `new_*` fields. The DB table had nine change-indicator fields; one was omitted from the Var. POSTs setting only that omitted field were rejected with a generic "fill out at least one change request field" validation error — a real, business-reported bug. Pattern: guard expression references a *subset* of a field category that actually carries semantic load. Always enumerate the full category from the schema.
 
 ### 2. Symmetry across parallel paths
 
