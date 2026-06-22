@@ -14,6 +14,9 @@ Optional, only if you'll run Talend builds locally:
 - A Talend Studio install
 - A Talend Management Console Personal Access Token
 
+Optional, only for the project-intake Excel report:
+- **`openpyxl`** (`pip install openpyxl`) — required *only* by the phase-2 Excel renderer `tools/intake_to_excel.py`. The phase-1 analyzer (`tools/project_intake.py`) is stdlib-only and produces JSON without it; install `openpyxl` just when you want the optional `.xlsx` report.
+
 ## Step 1 — clone the kit
 
 Pick any path *outside* any individual Talend project. The kit is shared across projects.

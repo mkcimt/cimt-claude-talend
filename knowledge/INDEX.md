@@ -15,12 +15,15 @@ How Talend Studio and its artifacts actually work. No project-level choice invol
 - [`git-workflow.md`](mechanics/git-workflow.md) — Feature branch discipline, worktrees alongside Studio, push protocol.
 - [`operational-vs-documentation.md`](mechanics/operational-vs-documentation.md) — Read-live principle: build/deploy/promote/review must read live state; documentation may cache with explicit staleness markers.
 - [`scratch-files.md`](mechanics/scratch-files.md) — Where Claude's temporary working files go: `.claude/tmp/` (gitignored, invisible to Studio's Git Staging).
+- [`component-system-catalog.md`](mechanics/component-system-catalog.md) — Maps a Talend `componentName` to the external system it talks to and the data direction (input/output), the catalog behind artifact system-inventory.
+- [`artifact-detection.md`](mechanics/artifact-detection.md) — How project artifacts (jobs, routes, services, joblets) are discovered and classified offline from `.item`/`.properties` files, with the detection cues to validate against the first real project.
 
 ## `patterns/` — Layer 2b: Optional patterns
 
 Patterns a Talend project may or may not use. The variant in use is **detected from the project's artifacts** at the moment it becomes relevant — each pattern file documents the detection cues. No pre-declaration in `CLAUDE.md` is needed.
 
 - [`context-variables.md`](patterns/context-variables.md) — Built-in context groups vs. external framework repo vs. `tContextLoad`. Detection cues and how to look up `context.getProperty(...)` per variant.
+- [`project-intake.md`](patterns/project-intake.md) — The offline project-intake method: artifact/system/complexity inventory + interface topology from a Talend project on disk, emitted as canonical JSON (with `static`/`tmc`/`manual` provenance) and an optional Excel report. Backs the `/project-intake` skill.
 
 *(Add `batch-job-framework.md` etc. here as the catalog grows — each with its own detection cues.)*
 

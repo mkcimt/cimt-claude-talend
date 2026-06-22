@@ -71,10 +71,12 @@ If anything looks off, **just ask Claude** — *"check the cimt-claude-talend se
 knowledge/        Markdown reference material, loaded on demand by Claude.
                   See knowledge/INDEX.md for the table of contents.
 skills/           Slash commands (review-talend-branch, review-talend-code,
-                  document-interface). Linked into your project's .claude/commands/.
+                  document-interface, project-intake). Linked into your project's .claude/commands/.
 agents/           Subagents used by the slash commands. Linked into .claude/agents/.
 tools/            Python CLIs (tmc_release.py, tmc_microservice_ops.py,
                   tds_ops.py + tds_client.py for Data Stewardship,
+                  project_intake.py — offline project analyzer emitting JSON
+                  (+ intake_to_excel.py for an optional Excel report),
                   touch_item_properties.py, cli.py for config get/set).
 templates/        Drop-in starting points for the consuming project.
                   - CLAUDE.md.template — project-overlay skeleton (drop-in fixed block).

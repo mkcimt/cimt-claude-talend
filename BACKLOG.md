@@ -8,6 +8,21 @@ Add new items at the top of the relevant section. When an item ships, move it un
 
 ## Tooling
 
+### project-intake — tighten interface clustering
+Validated against a real project, the proposed-interface clustering still over- and under-merges: the utility-fanout caps (how widely a shared joblet/connection is allowed to pull artifacts into one cluster) are heuristic and don't always land on the right boundary. This is expected — clustering is an inference, and **TMC plans (phase 3) are the authoritative grouping** of which jobs actually run together. Treat this as "good enough to scope from, confirm against plans/manual", and revisit the caps once phase-3 plan data is available to compare against.
+
+### project-intake — consolidate distinct-but-unresolved same-technology systems
+Many endpoints are context-variable-driven (e.g. several DB connections whose host/db come from `context.*`), so they stay `resolved: false` and currently surface as **separate** systems because their locator strings differ. Consider consolidating distinct-but-unresolved endpoints of the same `(family, technology)` into a single placeholder system (or grouping them under one "resolve me" gap), so a real project with many context-driven endpoints of the same technology doesn't read as dozens of distinct systems. Needs care not to wrongly merge endpoints that really are different.
+
+### project-intake phase 3 — TMC enrichment
+Fill the canonical JSON's reserved `tmc{}` block from the Talend Management Console: environments, engines/infrastructure (Remote/Dynamic engines), the task → deployed-artifact mapping, plans (which jobs run together), and execution stats to derive cadence (how often each artifact actually runs). The phase-1 analyzer already emits the `tmc{}` block empty with `tmc` provenance reserved; this populates it via the TMC API alongside the static facts.
+
+### project-intake phase 4 — manual capture
+Capture the things no artifact or API can tell us: non-Talend flows in the same integration landscape, infrastructure not visible to TMC, and a gap round-trip where the analyst confirms/corrects the auto-derived inventory. Lands under the reserved `manual{}` block with `manual` provenance, so static / TMC / manual facts stay distinguishable.
+
+### Calibrate the project-intake complexity metric
+`tools/talend_complexity.py` currently emits an *uncalibrated* deterministic score (`calibrated:false`, ratings shown as `"estimated"`). Calibrate the weights against a real project plus a real Talend **Audit** export (Audit gives an independent complexity reference per job), then flip the flag and drop the "estimated" qualifier once the metric tracks reality.
+
 ### Auto-derive `talend.p2.update.url` from `talend.project`
 Read `productVersion` (e.g. `8.0.1.20260102_0846-patch`) from the project's `talend.project` file, map the date to the matching Talend monthly-update site (`R2025-12` etc.), set `talend.p2.update.url` if unset. Cuts one manual setup step. The mapping table from build date to R-tag isn't in the file itself — needs Qlik's release cadence; check whether the bundled CommandLine exposes this anywhere.
 
@@ -36,6 +51,12 @@ Both review agents currently run on Opus. File count is not a reliable complexit
 ---
 
 ## Knowledge base
+
+### Validate project-intake ESB route/service detection (still open)
+The DI + REST-data-services validation pass confirmed the DI/REST `.properties` `xsi:type` tokens, the non-XMI item bodies, the `tRunJob` target id format, and project-root nesting (folded into `knowledge/mechanics/artifact-detection.md`). **Still unvalidated:** the ESB route/routelet/service `xsi:type` strings (`RouteItem`, `RouteProcessItem`, `CamelProcessItem`, `RouteletItem`, `ServiceItem`) and the on-disk route layout / `cTalendJob`-target + routelet-reference call mechanics — the validation project had no ESB. The dominant-`c*` prefix histogram remains the robust fallback. Validate against the first real ESB project and replace the remaining `[VALIDATE]` markers with confirmed values.
+
+### Harden project-intake `elementParameter` key names against more real projects
+Vendor component prefixes are robust, but the `elementParameter` connection-key names the component catalog reads to resolve a generic component's target system (`tDB*`, `tJDBC*`, `tMom*`, `cMessagingEndpoint` identity/object params) are still convention-based. Confirm and extend the synonym lists as more real projects (with different vendors) are analysed.
 
 ### Inventory pattern doc
 Some projects need an inventory of shared joblets / cross-cutting routines so they can be documented once and referenced from multiple interface docs. Write a Layer-2b knowledge note describing the convention: where the inventory lives in the consuming project (`docs/joblets/<name>.md`), the format (purpose + which interfaces use it), and how `/document-interface` interacts with it.
