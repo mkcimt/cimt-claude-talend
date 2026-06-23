@@ -56,6 +56,7 @@ DEFAULT_CONFIG: dict = {
         "n_loops":         (3.0, 6, None),
         "n_context_vars":  (0.2, 30, None),
         "n_flow_control":  (0.5, 15, None),
+        "n_external_libs": (1.5, 10, None),   # hard-referenced jars (upgrade-risk weight)
     },
     # Upper score bound (inclusive) for each bucket, in order. UNCALIBRATED baseline
     # tuned to a realistic spread on real-world-sized projects (small synthetic jobs
@@ -80,6 +81,7 @@ def extract_signals(
     ext_systems: Optional[int] = None,
     runjob_depth: Optional[int] = None,
     routine_names: Optional[set[str]] = None,
+    n_external_libs: Optional[int] = None,
 ) -> dict:
     """Pull the static complexity signals from a parsed `.item`.
 
@@ -161,6 +163,7 @@ def extract_signals(
         "n_loops": n_loops,
         "n_context_vars": len(model.context_vars),
         "n_flow_control": n_flow_control,
+        "n_external_libs": int(n_external_libs or 0),
         "_approx": approx,
     }
     return signals
@@ -191,18 +194,29 @@ def assess(
     ext_systems: Optional[int] = None,
     runjob_depth: Optional[int] = None,
     routine_names: Optional[set[str]] = None,
+    n_external_libs: Optional[int] = None,
 ) -> dict:
     """Convenience: signals + score + bucket + provenance, as the schema's complexity block."""
-    signals = extract_signals(model, artifact_type, ext_systems, runjob_depth, routine_names)
+    signals = extract_signals(model, artifact_type, ext_systems, runjob_depth,
+                              routine_names, n_external_libs)
     approx = signals.pop("_approx")
     sc = score(signals, config)
+    bkt = bucket(sc, config)
     return {
         "signals": signals,
         "score": sc,
-        "bucket": bucket(sc, config),
+        "bucket": bkt,
         "calibrated": config.get("config_version", "").startswith("calibrated"),
         "config_version": config.get("config_version", ""),
         "approx_flags": approx,
+        # Triage for the optional LLM semantic-complexity pass: flag the artifacts
+        # where the deterministic count is least trustworthy (heavy buckets, many
+        # tMap expressions = the "20 trivial vs 10 gnarly vars" case, or hard libs).
+        # An operator/Claude reads only the flagged artifacts and writes llm_rating.
+        "needs_llm_review": (bkt in ("Complex", "Very Complex")
+                             or signals.get("n_map_out_expr", 0) >= 20
+                             or signals.get("n_external_libs", 0) >= 2),
+        "llm_rating": None,        # filled by the skill-driven LLM pass (see skills/project-intake.md)
         "provenance": "static",
     }
 

@@ -76,7 +76,11 @@ agents/           Subagents used by the slash commands. Linked into .claude/agen
 tools/            Python CLIs (tmc_release.py, tmc_microservice_ops.py,
                   tds_ops.py + tds_client.py for Data Stewardship,
                   project_intake.py — offline project analyzer emitting JSON
-                  (+ intake_to_excel.py for an optional Excel report),
+                  (+ intake_to_excel.py for an optional Excel report;
+                  --tmc adds read-only TMC enrichment via tmc_client.py +
+                  tmc_intake.py, talend_dependencies.py extracts the
+                  dependency/upgrade-risk dimension, and talend_findings.py
+                  adds a deterministic static-review-findings dimension),
                   touch_item_properties.py, cli.py for config get/set).
 templates/        Drop-in starting points for the consuming project.
                   - CLAUDE.md.template — project-overlay skeleton (drop-in fixed block).

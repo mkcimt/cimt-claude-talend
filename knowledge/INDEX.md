@@ -23,7 +23,7 @@ How Talend Studio and its artifacts actually work. No project-level choice invol
 Patterns a Talend project may or may not use. The variant in use is **detected from the project's artifacts** at the moment it becomes relevant — each pattern file documents the detection cues. No pre-declaration in `CLAUDE.md` is needed.
 
 - [`context-variables.md`](patterns/context-variables.md) — Built-in context groups vs. external framework repo vs. `tContextLoad`. Detection cues and how to look up `context.getProperty(...)` per variant.
-- [`project-intake.md`](patterns/project-intake.md) — The offline project-intake method: artifact/system/complexity inventory + interface topology from a Talend project on disk, emitted as canonical JSON (with `static`/`tmc`/`manual` provenance) and an optional Excel report. Backs the `/project-intake` skill.
+- [`project-intake.md`](patterns/project-intake.md) — The offline project-intake method: artifact/system/complexity inventory + interface topology + deterministic static-review findings from a Talend project on disk, emitted as canonical JSON (with `static`/`tmc`/`manual` provenance) and an optional Excel report. Backs the `/project-intake` skill.
 
 *(Add `batch-job-framework.md` etc. here as the catalog grows — each with its own detection cues.)*
 
@@ -36,6 +36,7 @@ TMC API surface and gotchas. Pure mechanic — applies to any project using TMC.
 - [`microservice-log-collection.md`](tmc/microservice-log-collection.md) — The Log-Server collector-pool saturation trap: default `ms.worker.thread.number` too small → blocking log4j2 `SocketAppender` freezes a microservice's whole request pool. Diagnosis via SIGQUIT, fix via the collector cfg + DSR restart (no re-deploy).
 - [`deployment-modes.md`](tmc/deployment-modes.md) — Microservice on Remote Engine vs. OSGi bundle on Talend Runtime. The one project-level choice not derivable from artifacts — ask-once-and-persist.
 - [`known-bugs.md`](tmc/known-bugs.md) — Empirically verified TMC bugs and the workarounds we apply.
+- [`intake-read-only.md`](tmc/intake-read-only.md) — Read-only TMC enrichment for `/project-intake` phase 3: the API surface read (environments, engines, workspaces, tasks, plans), deployed-vs-worker-vs-orphaned artifact correlation, per-environment + prod-presence facts, and the dependency/upgrade-risk dimension (jar/lib extraction + version-drift detection). Read-only by construction — no writes to TMC.
 
 ## `tds/` — Talend Data Stewardship (Cloud) REST API
 

@@ -34,6 +34,8 @@ from typing import Optional
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import component_catalog as cat  # noqa: E402
 import talend_complexity as cx  # noqa: E402
+import talend_dependencies as depmod  # noqa: E402
+import talend_findings as findmod  # noqa: E402
 import talend_discovery as disc  # noqa: E402
 import talend_item as ti  # noqa: E402
 import talend_topology as topo  # noqa: E402
@@ -151,6 +153,8 @@ def analyze(project_path: Path | str, config: dict = cx.DEFAULT_CONFIG) -> dict:
     artifacts: list[dict] = []
     topo_nodes: list[topo.ArtifactNode] = []
     raw_components: list[dict] = []   # (family, technology, identity, direction) for the registry
+    all_deps: list[dict] = []         # external lib/jar dependencies across all artifacts
+    all_findings: list[dict] = []     # deterministic static-review findings across all artifacts
     parse_errors: list[dict] = []
 
     for r in refs:
@@ -194,6 +198,10 @@ def analyze(project_path: Path | str, config: dict = cx.DEFAULT_CONFIG) -> dict:
         repo_conns = _repo_connection_refs(model)
         joblets_used = sorted({n.component for n in model.active_nodes()
                                if n.component in joblet_labels})
+        deps = depmod.extract_dependencies(model)
+        all_deps.extend({**d, "artifact": r.label, "artifact_id": aid} for d in deps)
+        findings = findmod.extract(model, {"type": r.type, "components": comp_records})
+        all_findings.extend({**f, "artifact": r.label, "artifact_id": aid} for f in findings)
 
         artifacts.append({
             "artifact_id": aid,
@@ -214,6 +222,8 @@ def analyze(project_path: Path | str, config: dict = cx.DEFAULT_CONFIG) -> dict:
             "context_vars": [{"name": v, "provenance": "static"} for v in sorted(model.context_vars)],
             "repo_connection_ids": repo_conns,
             "joblets_used": joblets_used,
+            "dependencies": deps,
+            "findings": findings,
             "rest_contract_ref": None,
             "components": comp_records,
             "tmc_task": None,
@@ -273,9 +283,11 @@ def analyze(project_path: Path | str, config: dict = cx.DEFAULT_CONFIG) -> dict:
     for a in artifacts:
         model = a["_model"]
         ext = len(set(a["systems_read"]) | set(a["systems_write"]) | set(a["systems_connection"]))
+        n_libs = len({d["jar"] for d in a["dependencies"]})
         a["complexity"] = cx.assess(
             model, artifact_type=a["type"], config=config,
             ext_systems=ext, runjob_depth=depths.get(a["artifact_id"], 0),
+            n_external_libs=n_libs,
         )
 
     # --- Interfaces (logical clusters) --------------------------------------
@@ -328,6 +340,8 @@ def analyze(project_path: Path | str, config: dict = cx.DEFAULT_CONFIG) -> dict:
         "infrastructure": {"tmc_region": None, "workspaces": [], "engines": [],
                            "run_profiles": [], "manual_notes": []},
         "systems": systems_list,
+        "dependencies": depmod.summarize(all_deps),
+        "findings": findmod.summarize(all_findings),
         "artifacts": artifacts,
         "interfaces": interfaces,
         "tmc": {"enriched": False, "enriched_at": None, "region": None,
@@ -403,6 +417,12 @@ def collect_gaps(doc: dict, call_graph: dict, refs: list[disc.ArtifactRef]) -> l
             f"tRunJob/cTalendJob target '{tgt}' not found among scanned artifacts.",
             f"Where does '{tgt}' live (external project / deleted / dynamic)?")
 
+    for drift in doc.get("dependencies", {}).get("version_drift", []):
+        add("upgrade_risk", {"lib_base": drift["lib_base"]},
+            f"Library '{drift['lib_base']}' is hard-referenced in multiple versions "
+            f"({', '.join(drift['versions'])}) — a frequent upgrade breaker.",
+            f"Which version of '{drift['lib_base']}' is the target; can the others be consolidated?")
+
     for iface in doc["interfaces"]:
         if iface["ambiguous_members"]:
             add("ambiguous_cluster", {"interface_id": iface["interface_id"]},
@@ -427,6 +447,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", help="write canonical JSON to this file (default: stdout)")
     p.add_argument("--pretty", action="store_true", help="pretty-print JSON")
     p.add_argument("--summary", action="store_true", help="print human-readable counts, no JSON")
+    p.add_argument("--tmc", action="store_true",
+                   help="enrich with READ-ONLY TMC data (environments, engines, tasks, plans, "
+                        "deployed-vs-source) — needs tmc.pat in .claude/talend.local.properties")
+    p.add_argument("--tmc-stats", action="store_true",
+                   help="with --tmc, also pull per-task execution stats (many read calls; slower)")
     return p
 
 
@@ -455,6 +480,36 @@ def _print_summary(doc: dict) -> None:
         for b in ("Very Simple", "Simple", "Moderate", "Complex", "Very Complex"):
             if hist.get(b):
                 print(f"  {b:>14}: {hist[b]}")
+    deps = doc.get("dependencies", {})
+    if deps.get("distinct_jars"):
+        print(f"\nDependencies (external libs/jars): {len(deps['distinct_jars'])} distinct, "
+              f"{deps['total_refs']} refs")
+        for flag in deps.get("upgrade_risk_flags", []):
+            print(f"  ⚠ {flag}")
+    fnd = doc.get("findings", {})
+    if fnd.get("total"):
+        print(f"\nReview findings (deterministic): {fnd['total']} "
+              f"({', '.join(f'{k}={v}' for k, v in fnd.get('by_severity', {}).items())})")
+        for cat, n in list(fnd.get("by_category", {}).items())[:6]:
+            print(f"  {cat:>22}: {n}")
+    tmc = doc.get("tmc", {})
+    if tmc.get("enriched"):
+        envs = doc.get("environments", [])
+        infra = doc.get("infrastructure", {})
+        summ = tmc.get("summary", {})
+        print(f"\nTMC (read-only, region {tmc.get('region')}):")
+        print(f"  {'environments':>14}: {len(envs)}  ({', '.join(e['name'] for e in envs)})")
+        print(f"  {'engines':>14}: {len(infra.get('engines', []))}")
+        print(f"  {'workspaces':>14}: {len(infra.get('workspaces', []))}")
+        print(f"  {'tasks':>14}: {len(tmc.get('tasks', []))}")
+        print(f"  {'plans':>14}: {len(tmc.get('plans', []))}")
+        print(f"  {'deployable':>14}: {summ.get('deployable_total', 0)} (jobs/routes/services on disk)")
+        print(f"  {'deployed':>14}: {summ.get('deployed', 0)} (own TMC task; {summ.get('deployed_in_prod', 0)} in prod)")
+        if summ.get("deployment_by_environment"):
+            print(f"  {'by env':>14}: " + ", ".join(f"{e}={n}" for e, n in
+                  sorted(summ["deployment_by_environment"].items(), key=lambda kv: -kv[1])))
+        print(f"  {'as worker':>14}: {summ.get('reachable_via_parent', 0)} (called by a deployed job, no own task)")
+        print(f"  {'orphaned':>14}: {len(summ.get('orphaned_candidates', []))} (no task, not called — dead-code candidates)")
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -464,6 +519,20 @@ def main(argv: Optional[list[str]] = None) -> int:
         print(f"not a directory: {root}", file=sys.stderr)
         return 2
     doc = analyze(root)
+    if args.tmc:
+        try:
+            import tmc_intake  # noqa: E402 — optional, read-only
+            tmc_intake.enrich(doc, with_stats=args.tmc_stats,
+                              generated_at=doc["generated_at"])
+            print(f"TMC enrichment: {len(doc['tmc']['tasks'])} tasks, "
+                  f"{len(doc['tmc']['plans'])} plans, "
+                  f"{doc['tmc']['summary']['deployed']} artifacts deployed "
+                  f"({doc['tmc']['requests_made']} read calls)", file=sys.stderr)
+        except SystemExit as e:   # missing token -> warn, keep static doc
+            print(f"TMC enrichment skipped: {e}", file=sys.stderr)
+        except Exception as e:    # noqa: BLE001 — never let TMC break the static intake
+            print(f"TMC enrichment failed ({type(e).__name__}: {e}); "
+                  f"static doc preserved.", file=sys.stderr)
     if args.summary:
         _print_summary(doc)
         return 0

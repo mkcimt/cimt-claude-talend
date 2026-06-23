@@ -73,11 +73,17 @@ class MapperData:
     n_output_expressions: int = 0
     n_var_expressions: int = 0
     n_filter_expressions: int = 0
+    lookup_modes: list[str] = field(default_factory=list)   # lookupMode per lookup input table
 
     @property
     def n_lookups(self) -> int:
         # Input tables beyond the first are lookup joins.
         return max(0, self.n_input_tables - 1)
+
+    @property
+    def n_reload_lookups(self) -> int:
+        # Reload-at-each-row lookups — a classic tMap performance pitfall.
+        return sum(1 for m in self.lookup_modes if m in ("RELOAD", "CACHE_OR_RELOAD"))
 
 
 @dataclass
@@ -266,9 +272,13 @@ def _parse_mapper(node_data: ET.Element) -> MapperData:
     for el in node_data.iter():
         ln = _local(el.tag)
         if ln == "inputTables":
+            is_first = (m.n_input_tables == 0)   # the first input table is the main flow, not a lookup
             m.n_input_tables += 1
             if el.get("expressionFilter"):
                 m.n_filter_expressions += 1
+            mode = el.get("lookupMode")
+            if mode and not is_first:
+                m.lookup_modes.append(mode)
         elif ln == "outputTables":
             m.n_output_tables += 1
             if el.get("expressionFilter"):

@@ -31,3 +31,21 @@ When in doubt, treat a string as customer-specific and anonymize it. It is far c
 ## Where things go
 
 Layer classification is non-negotiable before adding knowledge — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full capture flow and [`knowledge/INDEX.md`](knowledge/INDEX.md) for the topic map. In short: only **Layer 2a** (universal Talend truth) and **Layer 2b** (optional patterns) belong in this repo. Layer 3 (project-specific) and Layer 4 (developer-specific) belong in the customer project or in user memory, **never here**.
+
+## `/project-intake` feature — status & open work
+
+A multi-phase project-intake feature is **in progress on branch `feature/project-intake`** (not yet merged to `main`). Method doc: [`knowledge/patterns/project-intake.md`](knowledge/patterns/project-intake.md); skill: [`skills/project-intake.md`](skills/project-intake.md); open items: [`BACKLOG.md`](BACKLOG.md).
+
+**Built (content-complete, 182 offline tests):**
+- **Phase 1 — static analyzer** ([`tools/project_intake.py`](tools/project_intake.py)): artifacts (type from XML, never names), systems read/written (from components — [`tools/component_catalog.py`](tools/component_catalog.py)), complexity (deterministic, uncalibrated, + a `needs_llm_review` triage flag — [`tools/talend_complexity.py`](tools/talend_complexity.py)), proposed interfaces (call graph — [`tools/talend_topology.py`](tools/talend_topology.py)), **dependency / upgrade-risk** ([`tools/talend_dependencies.py`](tools/talend_dependencies.py)), **deterministic review findings** ([`tools/talend_findings.py`](tools/talend_findings.py)), and gaps. Output is one canonical JSON; every fact carries `provenance ∈ {static, tmc, manual}`.
+- **Phase 2 — Excel** ([`tools/intake_to_excel.py`](tools/intake_to_excel.py), optional `openpyxl`): 12-sheet rendering of the JSON.
+- **Phase 3 — read-only TMC enrichment** ([`tools/tmc_client.py`](tools/tmc_client.py) GET-only by construction + [`tools/tmc_intake.py`](tools/tmc_intake.py)): environments/engines/workspaces/tasks/plans, deployed-vs-worker-vs-orphaned correlation, per-environment + prod presence. **Strictly read-only** — the client cannot issue a non-GET request (CI-locked in `tests/test_tmc_client.py`).
+
+**Open / next:**
+- **Phase 4 — manual capture** (next): generate a gap-/risk-driven, role-segmented **stakeholder-interview guide** from `gaps[]` + findings, and a **gap round-trip** that folds interview answers into the reserved `manual{}` block (`provenance:"manual"`). The intake produces the fact base; interviews add what code/TMC can't know and confirm the auto-derived assumptions.
+- Calibration & tuning (deferred to real test runs): complexity weights/thresholds (currently `calibrated:false`) vs. a Talend Audit export; the `needs_llm_review` / A+ deep-review triage; the findings catalog (`sql_dynamic` over-fires on context-parametrised SQL). See `BACKLOG.md` for the full list incl. ESB-detection `[VALIDATE]` and TMC refinements.
+- **History scrub** (separate, security): pre-kit customer tokens still live in old `main` commits — forward-fixed, history not yet rewritten.
+
+### Validating project-intake against a project that already uses this kit — clean-room rule
+
+When **test-running** `/project-intake` against a Talend project that already uses this kit, **explicitly ignore the project's own `CLAUDE.md`, `docs/`, `docs/interfaces/`, `knowledge/`, and any kit-generated documentation.** Derive the intake **purely** from the raw artifacts (`.item` / `.properties` / `talend.project`) and TMC — treat the project as if undocumented. The deterministic analyzer already only reads `.item`/`.properties`; this rule binds the **interactive / LLM steps** (complexity LLM pass, A+ deep review, phase-4) and the operator. Reason: a test run must validate what the analyzer *derives*, not echo pre-existing docs (which would be circular and contaminate the result).
