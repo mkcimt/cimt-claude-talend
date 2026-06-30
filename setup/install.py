@@ -606,6 +606,16 @@ def uninstall(project_dir: Path) -> int:
 
 
 def main(argv: list[str]) -> int:
+    # Windows consoles default to cp1252, which can't encode characters this
+    # script prints (e.g. U+2192 "→" in the OK/link lines). Force UTF-8 so it
+    # doesn't crash mid-output; replace-on-error means a truly hopeless codec
+    # still prints something instead of raising.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except (AttributeError, OSError):
+            pass
+
     p = argparse.ArgumentParser(prog="install.py", description=__doc__)
     p.add_argument("--uninstall", action="store_true", help="remove the kit's links from the project")
     p.add_argument("project", help="absolute path to your Talend project")
