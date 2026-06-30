@@ -116,6 +116,16 @@ def run_install(project_dir: Path) -> int:
 
 
 def main(argv: list[str]) -> int:
+    # Windows consoles default to cp1252, which can't encode some characters
+    # this script prints. Force UTF-8 so it doesn't crash mid-output;
+    # replace-on-error means a truly hopeless codec still prints something
+    # instead of raising.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except (AttributeError, OSError):
+            pass
+
     p = argparse.ArgumentParser(prog="bootstrap.py", description=__doc__)
     p.add_argument("project", help="absolute path to your Talend project")
     args = p.parse_args(argv)

@@ -119,6 +119,16 @@ def pull_qlik_docs() -> None:
 
 
 def main() -> int:
+    # Windows consoles default to cp1252, which can't encode some characters
+    # this script (and the install.py it spawns) prints. Force UTF-8 so it
+    # doesn't crash mid-output; replace-on-error means a truly hopeless codec
+    # still prints something instead of raising.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[attr-defined]
+        except (AttributeError, OSError):
+            pass
+
     p = argparse.ArgumentParser(prog="update.py", description=__doc__)
     p.add_argument("project", nargs="?", help="if given, run install.py on this project after the pull")
     args = p.parse_args()
