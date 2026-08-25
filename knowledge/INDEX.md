@@ -21,6 +21,9 @@ How Talend Studio and its artifacts actually work. No project-level choice invol
 Patterns a Talend project may or may not use. The variant in use is **detected from the project's artifacts** at the moment it becomes relevant — each pattern file documents the detection cues. No pre-declaration in `CLAUDE.md` is needed.
 
 - [`context-variables.md`](patterns/context-variables.md) — Built-in context groups vs. external framework repo vs. `tContextLoad`. Detection cues and how to look up `context.getProperty(...)` per variant.
+- [`job-instance-framework.md`](patterns/job-instance-framework.md) — `tJobInstanceStart` / `tJobInstanceEnd`, `JOB_INSTANCE_STATUS` / `JOB_INSTANCE_COUNTERS`, the "since my last successful run" window and its restart semantics, per-work-item pointers, the two-connections trap in the post-job.
+- [`dynamic-scd-framework.md`](patterns/dynamic-scd-framework.md) — Meta-table-driven SCD Type 2: control/dispatcher/worker stack, the `META_*` columns, the three `_current` view flavours and the exponential-tombstone bug a pass-through view causes.
+- [`scd-dispatcher-worker.md`](patterns/scd-dispatcher-worker.md) — The caller-parametrized SCD variant: dynamic-schema worker, `tHashRow` hashing in the extract job, tombstone `META_HV` mutation for resurrect-after-delete, current-view caveats.
 
 *(Add `batch-job-framework.md` etc. here as the catalog grows — each with its own detection cues.)*
 
