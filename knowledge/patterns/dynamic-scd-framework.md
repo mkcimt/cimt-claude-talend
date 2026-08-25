@@ -2,6 +2,8 @@
 
 A reusable Talend pattern for metadata-driven SCD Type 2 historisation of source-system tables. One control/dispatcher/worker stack handles **many tables**, parametrized by a meta table that lists which tables to process and what their business-keys are. Seen across multiple cimt projects. This file documents the pattern so it can be recognized and audited in any project that uses it.
 
+> **A second variant exists.** Where the generic jobs are parametrized by the **caller** rather than by a meta table — no meta table, no DDL job, business columns carried as a dynamic column, hashes computed with `tHashRow` in the extract job — see [`scd-dispatcher-worker.md`](scd-dispatcher-worker.md). The meta columns, the tombstone concept and the `_current` view flavours below apply to both.
+
 ## How to detect this pattern in a project
 
 Scan in this order:
