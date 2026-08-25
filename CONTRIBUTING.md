@@ -48,13 +48,49 @@ Note: project pattern choices for things like context-variable handling or batch
 
 This repo is currently maintained at [mkcimt/cimt-claude-talend](https://github.com/mkcimt/cimt-claude-talend). For meaningful additions:
 
-1. Fork or branch.
+1. Work on a feature branch in **your fork** — not in the kit checkout your projects consume. See the two checkouts below.
 2. Add the knowledge file (or update an existing one).
 3. Update `knowledge/INDEX.md` if you added a file.
 4. Add a short entry to `CHANGELOG.md` under `## [Unreleased]` describing the change (Keep-a-Changelog format: `### Added`/`### Changed`/`### Fixed`/`### Removed`/`### Security`).
-5. Open a PR with a short rationale: which layer, where it came from, how it was verified.
+5. If the change closes a `BACKLOG.md` item, move that entry to the backlog's `## Done` section in the same PR.
+6. Open a PR with a short rationale: which layer, where it came from, how it was verified.
 
-For typos or small clarifications, a PR directly to `main` is fine — no CHANGELOG entry needed for cosmetic-only changes.
+For typos or small clarifications the same route applies — only the CHANGELOG entry can be skipped for cosmetic-only changes.
+
+### The two checkouts
+
+The checkout a project points at (`.claude/cimt-claude-talend.path`, e.g. `C:\dev\cimt-claude-talend`) is a **downstream** clone of this repo. Unless you have write access, you cannot push from it — and you should not want to: it is the copy your projects load skills and knowledge from, so leaving it on a feature branch breaks `setup/update.py` and confuses the next session.
+
+Contributions go through a **fork**, cloned to a second folder (e.g. `C:\dev\forked\cimt-claude-talend`). Keep the two apart and the downstream copy always on `main`.
+
+One-time setup:
+
+1. Fork [mkcimt/cimt-claude-talend](https://github.com/mkcimt/cimt-claude-talend) on GitHub.
+2. Clone the fork into its own folder, separate from the downstream checkout.
+3. Optionally add the parent as a second remote so you can sync later: `git remote add upstream https://github.com/mkcimt/cimt-claude-talend.git`.
+
+Your fork's `main` stays a mirror of upstream `main` — never merge a feature branch into it. After a PR is merged, sync with `git checkout main && git pull upstream main` and delete the feature branch.
+
+### Per change — who does what
+
+**Claude:**
+
+1. Branch off the fork's `main` (`git checkout main && git pull` first if the fork has fallen behind — otherwise the PR needs a rebase later).
+2. Apply the change, including the INDEX, CHANGELOG and BACKLOG upkeep from the list above.
+3. Commit on the feature branch.
+4. Push to the fork's `origin`.
+5. Hand over a PR title and description covering layer, origin and verification.
+
+**You:**
+
+1. Open the fork on GitHub — the yellow "had recent pushes" banner appears after the push; click **Compare & pull request**.
+2. Check the direction: **base repository** `mkcimt/cimt-claude-talend`, **base** `main` ← **head repository** `<you>/cimt-claude-talend`, **compare** `<branch>`. GitHub usually preselects this for a fork, but not always.
+3. Paste the title and description Claude handed over.
+4. **Create pull request.**
+
+The split is not ceremony: Claude has neither a GitHub session nor, usually, the `gh` CLI, so it can push with your stored git credentials but cannot open the PR. If `gh` *is* installed and authenticated, Claude can do steps 1–4 of your half as well.
+
+**Push credentials.** The push targets your own fork, so a classic personal access token with the `repo` scope is enough (`public_repo` suffices while the fork is public). With a fine-grained token, the fork must be listed under *Repository access* and **Contents** must be *Read and write* — a token created before you forked will not include the new repository and fails with `Permission to <you>/… denied to <you>`. Only if a commit touches `.github/workflows/` is the additional `workflow` scope (fine-grained: *Workflows: write*) needed.
 
 ## Releases (maintainer note)
 
@@ -73,5 +109,7 @@ If you're working with Claude and a new insight pops up:
 - You confirm or correct.
 - Claude writes the file in the appropriate repo and commits on a feature branch.
 - You decide when to push.
+
+For a Layer 2a/2b finding, "the appropriate repo" is your fork of this one — see [Per change — who does what](#per-change--who-does-what) for the hand-off.
 
 The Capture Discipline rule (in the project `CLAUDE.md` template) makes this routine, not exceptional.
