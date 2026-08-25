@@ -40,11 +40,9 @@ Both review agents currently run on Opus. File count is not a reliable complexit
 ### Inventory pattern doc
 Some projects need an inventory of shared joblets / cross-cutting routines so they can be documented once and referenced from multiple interface docs. Write a Layer-2b knowledge note describing the convention: where the inventory lives in the consuming project (`docs/joblets/<name>.md`), the format (purpose + which interfaces use it), and how `/document-interface` interacts with it.
 
-### Pattern file: batch job frameworks
-Empty placeholder right now. Document the Job Instance Framework (custom components from the upstream repo) plus the "bespoke per-project dispatcher/worker" pattern, with detection cues.
-
 ---
 
 ## Done
 
-(nothing here yet — this section gets the migration items as they land)
+### Pattern file: batch job frameworks
+Landed as two files instead of one: [`knowledge/patterns/job-instance-framework.md`](knowledge/patterns/job-instance-framework.md) (the `tJobInstanceStart` / `tJobInstanceEnd` components, the bookkeeping tables, the "since my last successful run" window, per-work-item pointers) and [`knowledge/patterns/scd-dispatcher-worker.md`](knowledge/patterns/scd-dispatcher-worker.md) (the caller-parametrized dispatcher/worker variant, alongside the existing meta-table-driven `dynamic-scd-framework.md`). Both carry detection cues, an audit checklist and a project overlay slot.
